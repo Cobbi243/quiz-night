@@ -425,6 +425,32 @@ html, body {
   display: flex; gap: 8px; margin-top: 20px;
 }
 .modal-actions .btn { flex: 1; }
+
+/* TIMER BAR */
+.timer-bar {
+  margin-bottom: 16px;
+  background: var(--soft);
+  border-radius: 12px;
+  padding: 10px 16px;
+}
+.timer-bar-label {
+  font-size: 13px;
+  color: var(--ink-dim);
+  margin-bottom: 6px;
+  text-align: center;
+}
+.timer-bar-label b { color: var(--ink); font-size: 16px; font-family: 'Fraunces', Georgia, serif; }
+.timer-bar-track {
+  height: 6px;
+  background: rgba(250, 246, 239, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.timer-bar-fill {
+  height: 100%;
+  transition: width 0.25s linear;
+  border-radius: 3px;
+}
 </style>
 </head>
 <body>

@@ -31,6 +31,8 @@ const CATS_PER_BOARD = 6;
 const QS_PER_CAT = 5;
 const MAX_IMG_SIZE = 800;     // max width/height px
 const MAX_IMG_BYTES = 150_000; // ~150KB target after compression
+const BUZZ_SECONDS = 30;       // total time to buzz in
+const ANSWER_SECONDS = 15;     // time to answer once buzzed
 
 // Sample pack (used when "Готовий пак" selected)
 const SAMPLE_PACK = {
@@ -242,12 +244,34 @@ async function parseTextToPack(text){
   // OR:
   // КАТЕГОРІЯ: Назва
   // 200 | Питання | Відповідь
-  const lines = text.split(/\r?\n/);
-  const cats = [];
-  let cur = null;
-  for (let raw of lines) {
+  const rawLines = text.split(/\r?\n/);
+  // Pre-process: merge continuation lines into the previous Q-line.
+  // A "continuation" is a line that:
+  //   - has content
+  //   - is NOT a category marker (#, КАТЕГОРІЯ:, ==...==)
+  //   - does NOT start with "<number> |" (i.e. is not a new question)
+  // Such lines get appended to the previous question line with a space.
+  const lines = [];
+  const isCatMarker = l => /^#\s*.+/.test(l) || /^категорія\s*[:\-]/i.test(l) || /^==+\s*.+?\s*==+$/.test(l);
+  const isQStart = l => /^\s*\d+\s*\|/.test(l);
+  for (let raw of rawLines) {
     const line = raw.trim();
     if (!line) continue;
+    if (isCatMarker(line) || isQStart(line) || lines.length === 0) {
+      lines.push(line);
+    } else {
+      // Continuation — append to the last accumulated line if it is a Q line
+      const lastIdx = lines.length - 1;
+      if (isQStart(lines[lastIdx])) {
+        lines[lastIdx] = lines[lastIdx] + ' ' + line;
+      } else {
+        // Stray text before any Q — ignore
+      }
+    }
+  }
+  const cats = [];
+  let cur = null;
+  for (let line of lines) {
     // Category markers
     let catName = null;
     const m1 = line.match(/^#\s*(.+)$/);
@@ -310,16 +334,43 @@ async function parseDocxFile(file){
   // Walk top-level children: collect {text, images} per block.
   // Keep empty blocks too — they may contain only an image, which we need to
   // attach to the nearest question line above or below.
-  const lines = [];
+  const rawBlocks = [];
   div.childNodes.forEach(node => {
     if (node.nodeType === 1) {
       const text = node.textContent.trim();
       const imgs = Array.from(node.querySelectorAll('img')).map(img => img.src);
-      if (text || imgs.length) lines.push({text, images: imgs});
+      if (text || imgs.length) rawBlocks.push({text, images: imgs});
     }
   });
+
+  // Merge continuation blocks: if a block has text but is not a category marker
+  // and not a Q-start (no "<num> |" prefix), append its text to the previous
+  // Q block — and merge images into the previous block too.
+  const isCatMarker = l => /^#\s*.+/.test(l) || /^категорія\s*[:\-]/i.test(l) || /^==+\s*.+?\s*==+$/.test(l);
+  const isQStart = l => /^\s*\d+\s*\|/.test(l);
+  const lines = [];
+  for (const b of rawBlocks) {
+    const text = b.text;
+    if (!text && b.images.length) {
+      // Pure image block — keep as-is for later positional attachment
+      lines.push(b);
+    } else if (isCatMarker(text) || isQStart(text) || lines.length === 0) {
+      lines.push({ text, images: [...b.images] });
+    } else {
+      // Continuation: append text + images to the last Q block we have
+      const lastIdx = lines.length - 1;
+      if (isQStart(lines[lastIdx].text)) {
+        lines[lastIdx].text = lines[lastIdx].text + ' ' + text;
+        lines[lastIdx].images.push(...b.images);
+      } else {
+        // No Q to merge into — keep block separate, will be ignored later
+        lines.push({ text, images: [...b.images] });
+      }
+    }
+  }
+
   const totalImagesFound = lines.reduce((a,l)=>a+l.images.length, 0);
-  console.log('[parseDocx] blocks:', lines.length, 'images found:', totalImagesFound);
+  console.log('[parseDocx] raw blocks:', rawBlocks.length, 'after merge:', lines.length, 'images:', totalImagesFound);
 
   // Build text and parse first (without images)
   const fullText = lines.map(l => l.text).join('\n');
@@ -352,24 +403,36 @@ async function parseDocxFile(file){
 
     if (looksLikeQ && curCat >= 0 && curCat < pack.categories.length) {
       const value = parseInt(parts[0], 10);
+      const qText = (parts[1] || '').trim();
       const cat = pack.categories[curCat];
       const q = cat.questions.find(qq => qq.value === value);
       if (q) {
-        // Q image: img[0] in same block, else most recent pending image-only block
-        let qImg = item.images[0];
-        if (!qImg && pendingForQuestion.length) {
-          qImg = pendingForQuestion.shift().image;
-        }
-        if (qImg) {
-          try { q.image = await compressDataUrl(qImg); }
-          catch (e) { console.warn('img compress failed', e); q.image = qImg; }
-        }
-        // Answer image: img[1] in same block (if Q used img[0]) or img[0] if Q used pending
-        const usedItemImg0 = !!item.images[0] && qImg === item.images[0];
-        const candidateAns = usedItemImg0 ? item.images[1] : item.images[0];
-        if (candidateAns) {
-          try { q.answerImage = await compressDataUrl(candidateAns); }
-          catch (e) { q.answerImage = candidateAns; }
+        const imgs = item.images;
+        // Decide attachment:
+        //   2+ images in block → first=Q, second=A
+        //   1 image + empty Q-text → image is Q (image is the question)
+        //   1 image + non-empty Q-text → image is A (Q already has text, so img is for answer)
+        //   0 images + pending image-only block above → Q gets it
+        if (imgs.length >= 2) {
+          try { q.image = await compressDataUrl(imgs[0]); }
+          catch (e) { q.image = imgs[0]; }
+          try { q.answerImage = await compressDataUrl(imgs[1]); }
+          catch (e) { q.answerImage = imgs[1]; }
+        } else if (imgs.length === 1) {
+          if (qText.length === 0) {
+            // image IS the question
+            try { q.image = await compressDataUrl(imgs[0]); }
+            catch (e) { q.image = imgs[0]; }
+          } else {
+            // question has its own text → image is for the answer
+            try { q.answerImage = await compressDataUrl(imgs[0]); }
+            catch (e) { q.answerImage = imgs[0]; }
+          }
+        } else if (pendingForQuestion.length) {
+          // No inline images. Use pending image-only block as the Q image.
+          const pImg = pendingForQuestion.shift().image;
+          try { q.image = await compressDataUrl(pImg); }
+          catch (e) { q.image = pImg; }
         }
         lastQRef = { q, blockIdx: i };
         pendingForQuestion = [];
@@ -573,6 +636,10 @@ function computeHash(){
     finalBidLocal: state.finalBidLocal,
     finalAnswerLocal: state.finalAnswerLocal,
     editingScorePlayerId: state.editingScorePlayerId,
+    // Tick down the visible countdown each render
+    tick: r && r.status === 'question' && (r.questionState === 'buzzing' || r.questionState === 'answering')
+      ? Math.max(0, Math.ceil(((r.questionState === 'buzzing' ? r.buzzPhaseDeadline : r.answerPhaseDeadline) - Date.now()) / 1000))
+      : null,
     room: r ? {
       status: r.status, hostId: r.hostId,
       players: r.players, currentCell: r.currentCell,
@@ -1183,6 +1250,28 @@ function viewQuestion(){
       </div>
 
       <div style="margin-top:24px;">
+        ${(() => {
+          // Compute timer seconds left
+          const now = Date.now();
+          if (r.questionState === 'buzzing' && r.buzzPhaseDeadline) {
+            const sec = Math.max(0, Math.ceil((r.buzzPhaseDeadline - now) / 1000));
+            const pct = Math.min(100, (sec / BUZZ_SECONDS) * 100);
+            return `<div class="timer-bar">
+              <div class="timer-bar-label">⏱ Натиснути баззер: <b>${sec} сек</b></div>
+              <div class="timer-bar-track"><div class="timer-bar-fill" style="width:${pct}%; background:var(--accent);"></div></div>
+            </div>`;
+          }
+          if (r.questionState === 'answering' && r.answerPhaseDeadline) {
+            const sec = Math.max(0, Math.ceil((r.answerPhaseDeadline - now) / 1000));
+            const pct = Math.min(100, (sec / ANSWER_SECONDS) * 100);
+            return `<div class="timer-bar">
+              <div class="timer-bar-label">⏱ Відповідь: <b>${sec} сек</b></div>
+              <div class="timer-bar-track"><div class="timer-bar-fill" style="width:${pct}%; background:var(--gold);"></div></div>
+            </div>`;
+          }
+          return '';
+        })()}
+
         ${buzzed ? `
           <div class="buzzed-banner">
             <div class="buzzed-banner-label">ВІДПОВІДАЄ</div>
@@ -1202,16 +1291,9 @@ function viewQuestion(){
           </button>
         ` : '')}
 
-        ${state.isHost && r.questionState === 'reading' ? `
-          <div style="text-align:center;">
-            <button class="btn btn-accent btn-lg" data-action="open-buzz">${icon('play',18)} Відкрити баззер для гравців</button>
-            <div style="margin-top:8px; font-size:12px; color:var(--ink-dim);">Натисни коли прочитаєш питання вголос</div>
-          </div>
-        ` : ''}
-
         ${state.isHost && r.questionState === 'buzzing' && !buzzed ? `
           <div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:16px;">
-            ⏱ Очікуємо хто першим натисне...
+            Очікуємо хто першим натисне...
           </div>
         ` : ''}
 
@@ -1230,7 +1312,7 @@ function viewQuestion(){
           </div>
         ` : ''}
 
-        ${!r.revealAnswer && state.isHost && (allAttempted || (attempted.length > 0 && !buzzed)) ? `
+        ${!r.revealAnswer && state.isHost && !buzzed && (allAttempted || attempted.length > 0) ? `
           <div style="text-align:center; margin-top:12px;">
             <button class="btn btn-ghost btn-sm" data-action="reveal-answer">${icon('eye',14)} Показати відповідь і закрити</button>
           </div>
@@ -2069,19 +2151,29 @@ async function pickCell(ci, qi){
   if (!r) return;
   if (r.usedCells && r.usedCells[`${ci}-${qi}`]) return;
   if (!state.isHost && state.myId !== r.currentPicker) return;
+  const now = Date.now();
   await update(ref(db, `rooms/${state.code}`), {
     currentCell: {ci, qi},
     buzzedPlayer: null,
     attemptedBy: [],
-    questionState: 'reading',
+    // Open buzzer for everyone immediately, start 30s timer
+    questionState: 'buzzing',
+    buzzPhaseDeadline: now + BUZZ_SECONDS * 1000,
+    buzzPhaseRemainingMs: null,
+    answerPhaseDeadline: null,
     revealAnswer: false,
     status: 'question'
   });
 }
 
 async function openBuzz(){
+  // Retained for backwards compat (now unused, but harmless)
   if (!state.isHost) return;
-  await update(ref(db, `rooms/${state.code}`), { questionState: 'buzzing' });
+  const now = Date.now();
+  await update(ref(db, `rooms/${state.code}`), {
+    questionState: 'buzzing',
+    buzzPhaseDeadline: now + BUZZ_SECONDS * 1000,
+  });
 }
 
 async function buzz(){
@@ -2091,10 +2183,21 @@ async function buzz(){
   if (r.buzzedPlayer) return;
   if ((r.attemptedBy||[]).includes(state.myId)) return;
   if (r.questionState !== 'buzzing') return;
-  // Use transaction-like approach: fetch fresh then check
+  // Anti-race: fetch fresh
   const fresh = await getRoom(state.code);
   if (!fresh || fresh.buzzedPlayer || (fresh.attemptedBy||[]).includes(state.myId)) return;
-  await update(ref(db, `rooms/${state.code}`), { buzzedPlayer: state.myId });
+  if (fresh.questionState !== 'buzzing') return;
+  // Check buzz phase deadline hasn't passed
+  if (fresh.buzzPhaseDeadline && Date.now() > fresh.buzzPhaseDeadline) return;
+  // Pause buzz timer, start answer timer
+  const now = Date.now();
+  const remaining = fresh.buzzPhaseDeadline ? Math.max(0, fresh.buzzPhaseDeadline - now) : BUZZ_SECONDS * 1000;
+  await update(ref(db, `rooms/${state.code}`), {
+    buzzedPlayer: state.myId,
+    questionState: 'answering',
+    buzzPhaseRemainingMs: remaining,
+    answerPhaseDeadline: now + ANSWER_SECONDS * 1000,
+  });
 }
 
 async function judge(correctStr){
@@ -2114,18 +2217,117 @@ async function judge(correctStr){
     patch.revealAnswer = true;
     patch.questionState = 'closed';
     patch.buzzedPlayer = null;
+    patch.buzzPhaseDeadline = null;
+    patch.answerPhaseDeadline = null;
+    patch.buzzPhaseRemainingMs = null;
   } else if (correctStr === '0') {
     players[buzzedId] = { ...players[buzzedId], score: (players[buzzedId].score||0) - q.value };
-    patch.attemptedBy = [...(r.attemptedBy||[]), buzzedId];
+    const newAttempted = [...(r.attemptedBy||[]), buzzedId];
+    const nonHostCount = Object.values(r.players||{}).filter(p => p.id !== r.hostId).length;
+    patch.attemptedBy = newAttempted;
     patch.buzzedPlayer = null;
-    patch.questionState = 'buzzing';
+    // If everyone has already attempted, close the question
+    if (newAttempted.length >= nonHostCount) {
+      patch.usedCells = { ...(r.usedCells||{}), [`${ci}-${qi}`]: true };
+      patch.questionState = 'closed';
+      patch.revealAnswer = true;
+      patch.buzzPhaseDeadline = null;
+      patch.buzzPhaseRemainingMs = null;
+      patch.answerPhaseDeadline = null;
+    } else {
+      patch.questionState = 'buzzing';
+      const remaining = r.buzzPhaseRemainingMs || (BUZZ_SECONDS * 1000);
+      patch.buzzPhaseDeadline = Date.now() + remaining;
+      patch.buzzPhaseRemainingMs = null;
+      patch.answerPhaseDeadline = null;
+    }
   } else {
-    patch.attemptedBy = [...(r.attemptedBy||[]), buzzedId];
+    // "skip" / not counted
+    const newAttempted = [...(r.attemptedBy||[]), buzzedId];
+    const nonHostCount = Object.values(r.players||{}).filter(p => p.id !== r.hostId).length;
+    patch.attemptedBy = newAttempted;
     patch.buzzedPlayer = null;
-    patch.questionState = 'buzzing';
+    if (newAttempted.length >= nonHostCount) {
+      patch.usedCells = { ...(r.usedCells||{}), [`${ci}-${qi}`]: true };
+      patch.questionState = 'closed';
+      patch.revealAnswer = true;
+      patch.buzzPhaseDeadline = null;
+      patch.buzzPhaseRemainingMs = null;
+      patch.answerPhaseDeadline = null;
+    } else {
+      patch.questionState = 'buzzing';
+      const remaining = r.buzzPhaseRemainingMs || (BUZZ_SECONDS * 1000);
+      patch.buzzPhaseDeadline = Date.now() + remaining;
+      patch.buzzPhaseRemainingMs = null;
+      patch.answerPhaseDeadline = null;
+    }
   }
   patch.players = players;
   await update(ref(db, `rooms/${state.code}`), patch);
+}
+
+// Called when a timer expires. Any client can trigger this; we check
+// state freshness before applying changes to avoid double-firing.
+async function timeoutBuzzPhase(){
+  const fresh = await getRoom(state.code);
+  if (!fresh) return;
+  // Only fire if we're still in buzzing and deadline has passed
+  if (fresh.questionState !== 'buzzing') return;
+  if (!fresh.buzzPhaseDeadline || Date.now() < fresh.buzzPhaseDeadline) return;
+  if (!fresh.currentCell) return;
+  const {ci, qi} = fresh.currentCell;
+  const used = { ...(fresh.usedCells||{}), [`${ci}-${qi}`]: true };
+  const patch = {
+    usedCells: used,
+    revealAnswer: true,
+    questionState: 'closed',
+    buzzedPlayer: null,
+    buzzPhaseDeadline: null,
+    answerPhaseDeadline: null,
+    buzzPhaseRemainingMs: null,
+  };
+  await update(ref(db, `rooms/${state.code}`), patch);
+}
+
+async function timeoutAnswerPhase(){
+  const fresh = await getRoom(state.code);
+  if (!fresh) return;
+  if (fresh.questionState !== 'answering') return;
+  if (!fresh.answerPhaseDeadline || Date.now() < fresh.answerPhaseDeadline) return;
+  if (!fresh.buzzedPlayer || !fresh.currentCell) return;
+  // Treat as wrong: deduct value, return to buzzing or close if all attempted
+  const {ci, qi} = fresh.currentCell;
+  const q = fresh.pack.categories[ci].questions[qi];
+  const buzzedId = fresh.buzzedPlayer;
+  const players = { ...fresh.players };
+  players[buzzedId] = { ...players[buzzedId], score: (players[buzzedId].score||0) - q.value };
+  const newAttempted = [...(fresh.attemptedBy||[]), buzzedId];
+  const nonHostCount = Object.values(fresh.players||{}).filter(p => p.id !== fresh.hostId).length;
+
+  if (newAttempted.length >= nonHostCount) {
+    await update(ref(db, `rooms/${state.code}`), {
+      players,
+      attemptedBy: newAttempted,
+      usedCells: { ...(fresh.usedCells||{}), [`${ci}-${qi}`]: true },
+      buzzedPlayer: null,
+      questionState: 'closed',
+      revealAnswer: true,
+      buzzPhaseDeadline: null,
+      buzzPhaseRemainingMs: null,
+      answerPhaseDeadline: null,
+    });
+  } else {
+    const remaining = fresh.buzzPhaseRemainingMs || (BUZZ_SECONDS * 1000);
+    await update(ref(db, `rooms/${state.code}`), {
+      players,
+      attemptedBy: newAttempted,
+      buzzedPlayer: null,
+      questionState: 'buzzing',
+      buzzPhaseDeadline: Date.now() + remaining,
+      buzzPhaseRemainingMs: null,
+      answerPhaseDeadline: null,
+    });
+  }
 }
 
 async function revealAnswer(){
@@ -2138,7 +2340,10 @@ async function revealAnswer(){
     usedCells: used,
     revealAnswer: true,
     questionState: 'closed',
-    buzzedPlayer: null
+    buzzedPlayer: null,
+    buzzPhaseDeadline: null,
+    answerPhaseDeadline: null,
+    buzzPhaseRemainingMs: null,
   });
 }
 
@@ -2146,7 +2351,8 @@ async function closeQuestion(){
   if (!state.isHost) return;
   await update(ref(db, `rooms/${state.code}`), {
     currentCell: null, buzzedPlayer: null, attemptedBy: [],
-    questionState: null, revealAnswer: false, status: 'board'
+    questionState: null, revealAnswer: false, status: 'board',
+    buzzPhaseDeadline: null, answerPhaseDeadline: null, buzzPhaseRemainingMs: null,
   });
 }
 
@@ -2159,7 +2365,8 @@ async function backToBoard(){
   await update(ref(db, `rooms/${state.code}`), {
     currentCell: null, buzzedPlayer: null, attemptedBy: [],
     questionState: null, revealAnswer: false,
-    status: isRoundDone ? 'round_done' : 'board'
+    status: isRoundDone ? 'round_done' : 'board',
+    buzzPhaseDeadline: null, answerPhaseDeadline: null, buzzPhaseRemainingMs: null,
   });
 }
 
@@ -2374,3 +2581,26 @@ async function init(){
 }
 
 init();
+
+// ============== TIMER TICK ==============
+// Re-render every 250ms while a timer is running so the countdown updates,
+// and have the host fire timeouts when deadlines pass.
+setInterval(() => {
+  const r = state.room;
+  if (!r) return;
+  if (r.status !== 'question') return;
+  const now = Date.now();
+  if (r.questionState === 'buzzing' && r.buzzPhaseDeadline) {
+    if (now >= r.buzzPhaseDeadline) {
+      if (state.isHost) timeoutBuzzPhase();
+    } else {
+      render(); // tick the visible countdown
+    }
+  } else if (r.questionState === 'answering' && r.answerPhaseDeadline) {
+    if (now >= r.answerPhaseDeadline) {
+      if (state.isHost) timeoutAnswerPhase();
+    } else {
+      render();
+    }
+  }
+}, 250);
