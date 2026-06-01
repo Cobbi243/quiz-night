@@ -186,7 +186,21 @@ async function savePack(name, pack){
   if (!db) throw new Error('Firebase не ініціалізований');
   if (!state.myId) throw new Error('Користувач не авторизований');
   const id = genId();
-  const data = { name, pack, createdAt: Date.now() };
+  // Sanitize: Firebase forbids undefined. Convert all undefined → null.
+  const cleanPack = {
+    name: pack.name || name,
+    categories: (pack.categories || []).map(c => ({
+      name: c.name || '',
+      questions: (c.questions || []).map(q => ({
+        value: q.value,
+        q: q.q || '',
+        a: q.a || '',
+        image: q.image || null,
+        answerImage: q.answerImage || null,
+      }))
+    }))
+  };
+  const data = { name, pack: cleanPack, createdAt: Date.now() };
   // Estimate size
   const jsonSize = JSON.stringify(data).length;
   console.log('[savePack] size:', (jsonSize / 1024 / 1024).toFixed(2), 'MB');
