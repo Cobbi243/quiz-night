@@ -736,7 +736,7 @@ function viewHome(){
       <div style="text-align:center; margin-bottom: 48px;">
         <div class="eyebrow">QUIZ NIGHT • ОНЛАЙН</div>
         <h1 class="hero-title">Своя<br><em>Гра</em></h1>
-        <p class="hero-sub">Стрімерський квіз у форматі Jeopardy. 6×5 дошка, баззер-кнопки, ведучий судить. Як у Olsior'а.</p>
+        <p class="hero-sub">Квіз для компанії у форматі Jeopardy. Дошка 6×5, до 3 раундів + фінал зі ставками. Хто перший натиснув — той відповідає.</p>
       </div>
       <div class="options-row">
         <button class="btn btn-accent btn-lg" style="flex:1" data-action="go-host">${icon('plus',20)} Створити кімнату</button>
