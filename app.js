@@ -29,8 +29,8 @@ const AVATARS = ['🦊','🐼','🐯','🦁','🐸','🐙','🦉','🐲','🦄',
 const VALUES = [200, 400, 600, 800, 1000];
 const CATS_PER_BOARD = 6;
 const QS_PER_CAT = 5;
-const MAX_IMG_SIZE = 800;     // max width/height px
-const MAX_IMG_BYTES = 150_000; // ~150KB target after compression
+const MAX_IMG_SIZE = 700;     // max width/height px (compromise: visible but compact)
+const MAX_IMG_BYTES = 90_000; // ~90KB target after compression (was 150KB)
 const BUZZ_SECONDS = 30;       // total time to buzz in
 const ANSWER_SECONDS = 15;     // time to answer once buzzed
 
@@ -183,13 +183,18 @@ async function listPacks(){
   } catch (e) { console.error('listPacks', e); return []; }
 }
 async function savePack(name, pack){
-  if (!db || !state.myId) return null;
+  if (!db) throw new Error('Firebase не ініціалізований');
+  if (!state.myId) throw new Error('Користувач не авторизований');
   const id = genId();
   const data = { name, pack, createdAt: Date.now() };
-  try {
-    await set(ref(db, `users/${state.myId}/packs/${id}`), data);
-    return {id, ...data};
-  } catch (e) { console.error('savePack', e); return null; }
+  // Estimate size
+  const jsonSize = JSON.stringify(data).length;
+  console.log('[savePack] size:', (jsonSize / 1024 / 1024).toFixed(2), 'MB');
+  if (jsonSize > 9_000_000) {
+    throw new Error(`Пак занадто великий (${(jsonSize/1024/1024).toFixed(1)}МБ). Firebase обмежує до ~10МБ на запис. Зменши кількість/розмір картинок.`);
+  }
+  await set(ref(db, `users/${state.myId}/packs/${id}`), data);
+  return {id, ...data};
 }
 async function deletePack(id){
   if (!db || !state.myId) return;
@@ -403,33 +408,23 @@ async function parseDocxFile(file){
 
     if (looksLikeQ && curCat >= 0 && curCat < pack.categories.length) {
       const value = parseInt(parts[0], 10);
-      const qText = (parts[1] || '').trim();
       const cat = pack.categories[curCat];
       const q = cat.questions.find(qq => qq.value === value);
       if (q) {
+        // Rule (predictable):
+        //   - Image(s) INLINE with the "200 | ... | ..." line → all go to QUESTION
+        //     (first one wins if multiple, others discarded)
+        //   - Image(s) in a SEPARATE paragraph BEFORE this line → also go to QUESTION
+        //     (e.g. picture above the line)
+        //   - Image(s) in a SEPARATE paragraph AFTER this line (before next Q) → ANSWER
+        //   Handled below via `lastQRef` and `pendingForQuestion`.
         const imgs = item.images;
-        // Decide attachment:
-        //   2+ images in block → first=Q, second=A
-        //   1 image + empty Q-text → image is Q (image is the question)
-        //   1 image + non-empty Q-text → image is A (Q already has text, so img is for answer)
-        //   0 images + pending image-only block above → Q gets it
-        if (imgs.length >= 2) {
+        if (imgs.length >= 1) {
+          // Image inline with Q-line goes to QUESTION
           try { q.image = await compressDataUrl(imgs[0]); }
           catch (e) { q.image = imgs[0]; }
-          try { q.answerImage = await compressDataUrl(imgs[1]); }
-          catch (e) { q.answerImage = imgs[1]; }
-        } else if (imgs.length === 1) {
-          if (qText.length === 0) {
-            // image IS the question
-            try { q.image = await compressDataUrl(imgs[0]); }
-            catch (e) { q.image = imgs[0]; }
-          } else {
-            // question has its own text → image is for the answer
-            try { q.answerImage = await compressDataUrl(imgs[0]); }
-            catch (e) { q.answerImage = imgs[0]; }
-          }
         } else if (pendingForQuestion.length) {
-          // No inline images. Use pending image-only block as the Q image.
+          // No inline image — pull from pending images-above-this-Q
           const pImg = pendingForQuestion.shift().image;
           try { q.image = await compressDataUrl(pImg); }
           catch (e) { q.image = pImg; }
@@ -438,15 +433,15 @@ async function parseDocxFile(file){
         pendingForQuestion = [];
       }
     } else if (item.images.length && !line) {
-      // Pure image block — could be answer image for the previous question
+      // Pure image block.
+      // If we just saw a Q-line, this image is for that Q's ANSWER.
+      // If no recent Q-line (we're at start of category, between categories,
+      // or right after answers were attached), save it for the NEXT question.
       if (lastQRef && !lastQRef.q.answerImage) {
         try { lastQRef.q.answerImage = await compressDataUrl(item.images[0]); }
         catch (e) { lastQRef.q.answerImage = item.images[0]; }
-        // Don't clear lastQRef — could still be additional pending images, but
-        // we only accept one answer image per question
-        lastQRef = null;
+        lastQRef = null; // one answer image per question
       } else {
-        // Save for the NEXT question
         pendingForQuestion.push({ blockIdx: i, image: item.images[0] });
       }
     }
@@ -636,10 +631,6 @@ function computeHash(){
     finalBidLocal: state.finalBidLocal,
     finalAnswerLocal: state.finalAnswerLocal,
     editingScorePlayerId: state.editingScorePlayerId,
-    // Tick down the visible countdown each render
-    tick: r && r.status === 'question' && (r.questionState === 'buzzing' || r.questionState === 'answering')
-      ? Math.max(0, Math.ceil(((r.questionState === 'buzzing' ? r.buzzPhaseDeadline : r.answerPhaseDeadline) - Date.now()) / 1000))
-      : null,
     room: r ? {
       status: r.status, hostId: r.hostId,
       players: r.players, currentCell: r.currentCell,
@@ -983,15 +974,15 @@ function viewSetupFile(){
 # Кіно
 200 | У якій країні зняли «Паразити»? | Південна Корея
 400 | Хто зіграв Нео? | Кіану Рівз
-600 | ... | ...
-800 | ... | ...
-1000 | ... | ...
 
 # Історія
 200 | ... | ...
-...
 
-(6 категорій, по 5 питань. У .docx картинки прив'язуються до того питання, де вони стоять у тексті.)</div>
+📷 КАРТИНКИ у .docx:
+• Картинка В РЯДКУ питання → буде картинкою ПИТАННЯ
+• Картинка у НАСТУПНОМУ абзаці після рядка → буде картинкою ВІДПОВІДІ
+
+(6 категорій × 5 питань. Бали: 200/400/600/800/1000)</div>
 
       ${state.setupErr ? `<div class="err-text">${esc(state.setupErr)}</div>` : ''}
       ${state.setupLoading ? `<div class="info-text"><span class="spin">${icon('loader',16)}</span> Парсимо файл...</div>` : ''}
@@ -1256,17 +1247,17 @@ function viewQuestion(){
           if (r.questionState === 'buzzing' && r.buzzPhaseDeadline) {
             const sec = Math.max(0, Math.ceil((r.buzzPhaseDeadline - now) / 1000));
             const pct = Math.min(100, (sec / BUZZ_SECONDS) * 100);
-            return `<div class="timer-bar">
-              <div class="timer-bar-label">⏱ Натиснути баззер: <b>${sec} сек</b></div>
-              <div class="timer-bar-track"><div class="timer-bar-fill" style="width:${pct}%; background:var(--accent);"></div></div>
+            return `<div class="timer-bar" id="timer-bar">
+              <div class="timer-bar-label">⏱ Натиснути баззер: <b id="timer-sec">${sec}</b> сек</div>
+              <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--accent);"></div></div>
             </div>`;
           }
           if (r.questionState === 'answering' && r.answerPhaseDeadline) {
             const sec = Math.max(0, Math.ceil((r.answerPhaseDeadline - now) / 1000));
             const pct = Math.min(100, (sec / ANSWER_SECONDS) * 100);
-            return `<div class="timer-bar">
-              <div class="timer-bar-label">⏱ Відповідь: <b>${sec} сек</b></div>
-              <div class="timer-bar-track"><div class="timer-bar-fill" style="width:${pct}%; background:var(--gold);"></div></div>
+            return `<div class="timer-bar" id="timer-bar">
+              <div class="timer-bar-label">⏱ Відповідь: <b id="timer-sec">${sec}</b> сек</div>
+              <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--gold);"></div></div>
             </div>`;
           }
           return '';
@@ -1931,12 +1922,23 @@ async function saveCurrentPack(pack){
   let name = state.setupSavePackName?.trim();
   if (!name) { name = prompt('Назва пака:') || ''; name = name.trim(); }
   if (!name) return;
-  const saved = await savePack(name, pack);
-  if (saved) {
-    state.savedPacks = [saved, ...state.savedPacks];
-    state.setupSavePackName = '';
-    alert('Збережено!');
+  state.setupErr = '';
+  try {
+    const saved = await savePack(name, pack);
+    if (saved) {
+      state.savedPacks = [saved, ...state.savedPacks];
+      state.setupSavePackName = '';
+      alert('Пак збережено в БД ✓');
+      render(true);
+    } else {
+      state.setupErr = 'Не вдалося зберегти (без деталей)';
+      render(true);
+    }
+  } catch (e) {
+    console.error('[saveCurrentPack] error:', e);
+    state.setupErr = 'Помилка збереження: ' + (e.message || e);
     render(true);
+    alert('Не вдалося зберегти: ' + (e.message || e));
   }
 }
 async function useSavedPack(id){
@@ -2585,6 +2587,27 @@ init();
 // ============== TIMER TICK ==============
 // Re-render every 250ms while a timer is running so the countdown updates,
 // and have the host fire timeouts when deadlines pass.
+function updateTimerOnly(){
+  const r = state.room;
+  if (!r || r.status !== 'question') return;
+  const now = Date.now();
+  let sec, pct, total;
+  if (r.questionState === 'buzzing' && r.buzzPhaseDeadline) {
+    sec = Math.max(0, Math.ceil((r.buzzPhaseDeadline - now) / 1000));
+    total = BUZZ_SECONDS;
+  } else if (r.questionState === 'answering' && r.answerPhaseDeadline) {
+    sec = Math.max(0, Math.ceil((r.answerPhaseDeadline - now) / 1000));
+    total = ANSWER_SECONDS;
+  } else {
+    return;
+  }
+  pct = Math.min(100, (sec / total) * 100);
+  const secEl = document.getElementById('timer-sec');
+  const fillEl = document.getElementById('timer-fill');
+  if (secEl) secEl.textContent = sec;
+  if (fillEl) fillEl.style.width = pct + '%';
+}
+
 setInterval(() => {
   const r = state.room;
   if (!r) return;
@@ -2594,13 +2617,13 @@ setInterval(() => {
     if (now >= r.buzzPhaseDeadline) {
       if (state.isHost) timeoutBuzzPhase();
     } else {
-      render(); // tick the visible countdown
+      updateTimerOnly();
     }
   } else if (r.questionState === 'answering' && r.answerPhaseDeadline) {
     if (now >= r.answerPhaseDeadline) {
       if (state.isHost) timeoutAnswerPhase();
     } else {
-      render();
+      updateTimerOnly();
     }
   }
 }, 250);
