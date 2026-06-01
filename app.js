@@ -2479,12 +2479,14 @@ async function judgeFinalPlayer(playerId, verdict){
 async function finalizeFinal(){
   if (!state.isHost) return;
   const r = state.room;
-  if (!r || !r.finalBids || !r.finalJudgement) return;
+  if (!r) return;
   const players = { ...r.players };
-  // Apply verdicts to scores
-  for (const [pid, sub] of Object.entries(r.finalBids)) {
+  const bids = r.finalBids || {};
+  const judgement = r.finalJudgement || {};
+  // Apply verdicts to scores (if any)
+  for (const [pid, sub] of Object.entries(bids)) {
     if (!sub || !sub.submitted) continue;
-    const verdict = r.finalJudgement[pid];
+    const verdict = judgement[pid];
     if (verdict === 'correct') {
       players[pid] = { ...players[pid], score: (players[pid].score||0) + sub.bid };
     } else if (verdict === 'wrong') {
