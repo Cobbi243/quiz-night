@@ -33,6 +33,7 @@ const MAX_IMG_SIZE = 700;     // max width/height px (compromise: visible but co
 const MAX_IMG_BYTES = 90_000; // ~90KB target after compression (was 150KB)
 const BUZZ_SECONDS = 30;       // total time to buzz in
 const ANSWER_SECONDS = 15;     // time to answer once buzzed
+const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // Sample pack (used when "Готовий пак" selected)
 const SAMPLE_PACK = {
@@ -642,8 +643,6 @@ function computeHash(){
     setupRoundsTotal: state.setupRoundsTotal,
     setupCurrentRound: state.setupCurrentRound,
     setupFinalQ: state.setupFinalQ,
-    finalBidLocal: state.finalBidLocal,
-    finalAnswerLocal: state.finalAnswerLocal,
     editingScorePlayerId: state.editingScorePlayerId,
     room: r ? {
       status: r.status, hostId: r.hostId,
@@ -686,6 +685,8 @@ function render(force){
     html = viewRoundDone();
   } else if (state.room && state.room.status === 'final_bid') {
     html = viewFinalBid();
+  } else if (state.room && state.room.status === 'final_answer') {
+    html = viewFinalAnswer();
   } else if (state.room && state.room.status === 'final_reveal') {
     html = viewFinalReveal();
   } else {
@@ -1179,10 +1180,11 @@ function viewBoard(){
       <div class="board-wrap">
         <div class="board">
           ${cats.map(c => `<div class="board-header"><div class="cat-name">${esc(c.name)}</div></div>`).join('')}
-          ${VALUES.map((v, vi) =>
+          ${VALUES.map((_v, vi) =>
             cats.map((c, ci) => {
               const used = r.usedCells && r.usedCells[`${ci}-${vi}`];
-              return `<button class="board-cell ${used?'used':''}" ${(used||!canPick)?'disabled':''} data-action="pick-cell" data-ci="${ci}" data-qi="${vi}">${used ? '' : v}</button>`;
+              const cellValue = c.questions[vi]?.value || VALUES[vi];
+              return `<button class="board-cell ${used?'used':''}" ${(used||!canPick)?'disabled':''} data-action="pick-cell" data-ci="${ci}" data-qi="${vi}">${used ? '' : cellValue}</button>`;
             }).join('')
           ).join('')}
         </div>
@@ -1459,15 +1461,106 @@ function viewFinalBid(){
   const nonHost = players.filter(p => p.id !== r.hostId);
   const me = players.find(p => p.id === state.myId);
   const myBids = r.finalBids || {};
-  const mySubmission = myBids[state.myId];
   const myScore = Math.max(0, me?.score || 0);
-  const allSubmittedCount = Object.values(myBids).filter(b => b && b.submitted).length;
+  const allBidsSubmittedCount = Object.values(myBids).filter(b => b && b.bidSubmitted).length;
 
   if (state.isHost) {
     return `
       <div class="container slide-up" style="padding-top:24px;">
-        <div class="eyebrow">ФІНАЛ · ОЧІКУЄМО ВІДПОВІДІ</div>
+        <div class="eyebrow">ФІНАЛ · ФАЗА 1 · СТАВКИ</div>
         <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-top:8px; margin-bottom:8px;">${esc(r.finalQ.category)}</h2>
+        <p style="color:var(--ink-dim); margin-bottom:24px;">Гравці бачать тільки категорію і ставлять бали. Питання покажеться у фазі 2.</p>
+        <div class="card" style="margin-bottom:16px;">
+          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px;">ПИТАННЯ (тільки ти бачиш)</div>
+          <div style="font-family:'Fraunces',serif; font-size:20px; font-weight:700; margin-bottom:12px;">${esc(r.finalQ.q)}</div>
+          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ВІДПОВІДЬ</div>
+          <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--green);">${esc(r.finalQ.a)}</div>
+        </div>
+        <div class="card" style="margin-bottom:16px;">
+          <div style="font-size:14px; color:var(--ink-dim); margin-bottom:12px;">
+            Поставили ставку: ${allBidsSubmittedCount} з ${nonHost.length}
+          </div>
+          ${nonHost.map(p => {
+            const sub = myBids[p.id];
+            const done = sub && sub.bidSubmitted;
+            return `<div class="final-row">
+              <span style="font-size:20px;">${p.avatar}</span>
+              <div class="name">${esc(p.name)}</div>
+              <div style="color:${done?'var(--green)':'var(--ink-dim)'}; font-size:13px;">${done ? `✓ ${sub.bid}` : '⌛ Очікуємо'}</div>
+            </div>`;
+          }).join('')}
+        </div>
+        ${allBidsSubmittedCount === nonHost.length && nonHost.length > 0 ? `
+          <button class="btn btn-gold btn-lg btn-full" data-action="start-final-answer-phase" style="margin-top:8px;">
+            ${icon('play',18)} Показати питання гравцям (90 сек на відповідь)
+          </button>
+        ` : `
+          <button class="btn btn-ghost btn-lg btn-full" data-action="start-final-answer-phase" style="margin-top:8px;">
+            Не чекати решту, показати питання зараз
+          </button>
+        `}
+      </div>
+    `;
+  }
+
+  // Player view
+  const bid = state.finalBidLocal;
+  const ans = state.finalAnswerLocal;
+  const validBid = Number.isInteger(bid) && bid >= 0 && bid <= myScore;
+  const myBid = myBids[state.myId];
+  const bidAlreadySubmitted = myBid && myBid.bidSubmitted;
+  return `
+    <div class="container slide-up" style="padding-top:24px;">
+      <div class="eyebrow">ФІНАЛ · ФАЗА 1 · СТАВКА</div>
+      <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:900; margin-top:8px;">${esc(r.finalQ.category)}</h2>
+      <p style="color:var(--ink-dim); margin-top:8px; margin-bottom:24px;">Постав скільки балів готовий поставити на правильну відповідь. Питання покажуть після того як всі поставлять.</p>
+      ${bidAlreadySubmitted ? `
+        <div class="card" style="text-align:center;">
+          <div style="font-size:48px; margin-bottom:12px;">✓</div>
+          <div style="font-size:14px; color:var(--ink-dim); margin-bottom:4px;">ТВОЯ СТАВКА</div>
+          <div style="font-family:'Fraunces',serif; font-size:42px; font-weight:900; color:var(--gold);">${myBid.bid}</div>
+          <div style="margin-top:12px; color:var(--ink-dim); font-size:13px;">Очікуємо інших гравців і питання від ведучого</div>
+        </div>
+      ` : `
+        <div class="card">
+          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ТВОЇ БАЛИ</div>
+          <div style="font-family:'Fraunces',serif; font-size:36px; font-weight:900; color:var(--gold); margin-bottom:16px;">${me?.score || 0}</div>
+          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">СКІЛЬКИ СТАВИШ (0 — ${myScore})</div>
+          <input type="number" class="input" id="final-bid" min="0" max="${myScore}" value="${bid}" style="font-family:'Fraunces',serif; font-size:24px; font-weight:700; color:var(--accent);">
+        </div>
+        <div id="final-bid-err" class="err-text" style="display:${validBid ? 'none' : 'block'};">Ставка має бути від 0 до ${myScore}</div>
+        <button id="final-submit-btn" class="btn btn-accent btn-lg btn-full" data-action="submit-final-bid" ${!validBid ? 'disabled' : ''} style="margin-top:16px;">
+          ${icon('check',18)} Подати ставку
+        </button>
+      `}
+    </div>
+  `;
+}
+
+// FINAL ANSWER PHASE — question is revealed, players have a timer to answer
+function viewFinalAnswer(){
+  const r = state.room;
+  if (!r || !r.finalQ) return '';
+  const players = getPlayerList(r);
+  const nonHost = players.filter(p => p.id !== r.hostId);
+  const me = players.find(p => p.id === state.myId);
+  const bids = r.finalBids || {};
+  const myBid = bids[state.myId];
+  const allAnsweredCount = Object.values(bids).filter(b => b && b.answerSubmitted).length;
+
+  if (state.isHost) {
+    return `
+      <div class="container slide-up" style="padding-top:24px;">
+        <div class="eyebrow">ФІНАЛ · ФАЗА 2 · ВІДПОВІДЬ</div>
+        <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-top:8px; margin-bottom:8px;">${esc(r.finalQ.category)}</h2>
+        ${r.finalPhaseDeadline ? (() => {
+          const sec = Math.max(0, Math.ceil((r.finalPhaseDeadline - Date.now()) / 1000));
+          const pct = Math.min(100, (sec / FINAL_SECONDS) * 100);
+          return `<div class="timer-bar" id="timer-bar" style="margin-top:16px;">
+            <div class="timer-bar-label">⏱ До завершення: <b id="timer-sec">${sec}</b> сек</div>
+            <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--gold);"></div></div>
+          </div>`;
+        })() : ''}
         <div class="card" style="margin-top:24px;">
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px;">ПИТАННЯ</div>
           <div style="font-family:'Fraunces',serif; font-size:22px; font-weight:700; margin-bottom:16px;">${esc(r.finalQ.q)}</div>
@@ -1476,19 +1569,19 @@ function viewFinalBid(){
         </div>
         <div class="card" style="margin-top:16px;">
           <div style="font-size:14px; color:var(--ink-dim); margin-bottom:12px;">
-            Подали: ${allSubmittedCount} з ${nonHost.length}
+            Відповіли: ${allAnsweredCount} з ${nonHost.length}
           </div>
           ${nonHost.map(p => {
-            const sub = myBids[p.id];
-            const done = sub && sub.submitted;
+            const sub = bids[p.id];
+            const done = sub && sub.answerSubmitted;
             return `<div class="final-row">
               <span style="font-size:20px;">${p.avatar}</span>
               <div class="name">${esc(p.name)}</div>
-              <div style="color:${done?'var(--green)':'var(--ink-dim)'}; font-size:13px;">${done ? '✓ Готово' : '⌛ Очікуємо'}</div>
+              <div style="color:${done?'var(--green)':'var(--ink-dim)'}; font-size:13px;">${done ? '✓ Готово' : '⌛ Думає'}</div>
             </div>`;
           }).join('')}
         </div>
-        ${allSubmittedCount === nonHost.length && nonHost.length > 0 ? `
+        ${allAnsweredCount === nonHost.length && nonHost.length > 0 ? `
           <button class="btn btn-gold btn-lg btn-full" data-action="go-final-reveal" style="margin-top:16px;">
             ${icon('eye',18)} Переглянути відповіді
           </button>
@@ -1502,44 +1595,43 @@ function viewFinalBid(){
   }
 
   // Player view
-  if (mySubmission && mySubmission.submitted) {
+  if (myBid && myBid.answerSubmitted) {
     return `
       <div class="container slide-up" style="padding-top:24px;">
-        <div class="eyebrow">ФІНАЛ</div>
-        <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-top:8px;">Відповідь подано</h2>
+        <div class="eyebrow">ФІНАЛ · ВІДПОВІДЬ ПОДАНО</div>
+        <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-top:8px;">Готово</h2>
         <div class="card" style="margin-top:24px; text-align:center;">
           <div style="font-size:48px; margin-bottom:12px;">✓</div>
           <div style="color:var(--ink-dim); margin-bottom:12px;">Очікуємо інших гравців і вердикт ведучого</div>
-          <div style="font-size:13px;">Твоя ставка: <b style="color:var(--gold);">${mySubmission.bid}</b></div>
-          <div style="font-size:13px; margin-top:4px;">Твоя відповідь: <b>${esc(mySubmission.answer)}</b></div>
+          <div style="font-size:13px;">Твоя ставка: <b style="color:var(--gold);">${myBid.bid}</b></div>
+          <div style="font-size:13px; margin-top:4px;">Твоя відповідь: <b>${esc(myBid.answer || '')}</b></div>
         </div>
       </div>
     `;
   }
 
-  const bid = state.finalBidLocal;
   const ans = state.finalAnswerLocal;
-  const validBid = Number.isInteger(bid) && bid >= 0 && bid <= myScore;
   return `
     <div class="container slide-up" style="padding-top:24px;">
-      <div class="eyebrow">ФІНАЛЬНИЙ РАУНД</div>
-      <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:900; margin-top:8px;">${esc(r.finalQ.category)}</h2>
-      <p style="color:var(--ink-dim); margin-top:8px; margin-bottom:24px;">Постав до своїх балів і дай відповідь. Якщо правильно — додамо ставку, неправильно — віднімемо.</p>
+      <div class="eyebrow">ФІНАЛ · ФАЗА 2 · ВІДПОВІДЬ</div>
+      <h2 style="font-family:'Fraunces',serif; font-size:32px; font-weight:900; margin-top:8px;">${esc(r.finalQ.category)}</h2>
+      ${r.finalPhaseDeadline ? (() => {
+        const sec = Math.max(0, Math.ceil((r.finalPhaseDeadline - Date.now()) / 1000));
+        const pct = Math.min(100, (sec / FINAL_SECONDS) * 100);
+        return `<div class="timer-bar" id="timer-bar" style="margin-top:12px; margin-bottom:8px;">
+          <div class="timer-bar-label">⏱ Залишилось: <b id="timer-sec">${sec}</b> сек</div>
+          <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--accent);"></div></div>
+        </div>`;
+      })() : ''}
+      <p style="color:var(--ink-dim); margin-top:8px; margin-bottom:16px;">Твоя ставка: <b style="color:var(--gold);">${myBid?.bid ?? 0}</b> балів. Напиши відповідь — встигни до закінчення часу.</p>
       <div class="card">
-        <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ТВОЇ БАЛИ</div>
-        <div style="font-family:'Fraunces',serif; font-size:36px; font-weight:900; color:var(--gold); margin-bottom:16px;">${me?.score || 0}</div>
-        <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">СКІЛЬКИ СТАВИШ (0 — ${myScore})</div>
-        <input type="number" class="input" id="final-bid" min="0" max="${myScore}" value="${bid}" style="font-family:'Fraunces',serif; font-size:24px; font-weight:700; color:var(--accent);">
-      </div>
-      <div class="card" style="margin-top:16px;">
         <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px;">ПИТАННЯ</div>
         <div style="font-family:'Fraunces',serif; font-size:22px; font-weight:700; margin-bottom:16px;">${esc(r.finalQ.q)}</div>
         <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ТВОЯ ВІДПОВІДЬ</div>
         <input class="input" id="final-answer" placeholder="Напиши відповідь..." value="${esc(ans)}" autocomplete="off">
       </div>
-      ${!validBid ? `<div class="err-text">Ставка має бути від 0 до ${myScore}</div>` : ''}
-      <button class="btn btn-accent btn-lg btn-full" data-action="submit-final-bid" ${!validBid || !ans.trim() ? 'disabled' : ''} style="margin-top:16px;">
-        ${icon('check',18)} Подати ставку і відповідь
+      <button id="final-submit-btn" class="btn btn-accent btn-lg btn-full" data-action="submit-final-answer" ${!ans.trim() ? 'disabled' : ''} style="margin-top:16px;">
+        ${icon('check',18)} Подати відповідь
       </button>
     </div>
   `;
@@ -1568,12 +1660,12 @@ function viewFinalReveal(){
         <div style="margin-top:24px;">
           ${nonHost.map(p => {
             const sub = bids[p.id];
-            if (!sub || !sub.submitted) {
+            if (!sub || !sub.answerSubmitted) {
               return `<div class="card" style="margin-bottom:12px; opacity:0.5;">
                 <div style="display:flex; align-items:center; gap:8px;">
                   <span style="font-size:24px;">${p.avatar}</span>
                   <div style="flex:1;"><b>${esc(p.name)}</b></div>
-                  <div style="font-size:13px; color:var(--ink-dim);">Не подав відповідь</div>
+                  <div style="font-size:13px; color:var(--ink-dim);">${sub && sub.bidSubmitted ? `Поставив ${sub.bid}, не встиг відповісти` : 'Не подав ставку'}</div>
                 </div>
               </div>`;
             }
@@ -1745,12 +1837,13 @@ function attachListeners(){
   if (fb) fb.addEventListener('input', e => {
     const v = parseInt(e.target.value, 10);
     state.finalBidLocal = isNaN(v) ? 0 : v;
-    render();
+    // Update the submit button's disabled state without full re-render
+    updateFinalSubmitButton();
   });
   const fans = document.getElementById('final-answer');
   if (fans) fans.addEventListener('input', e => {
     state.finalAnswerLocal = e.target.value;
-    render();
+    updateFinalSubmitButton();
   });
   // Score edit modal input
   const seInput = document.getElementById('score-edit-input');
@@ -1835,6 +1928,8 @@ async function handleAction(e){
     case 'leave-final-setup': state.subScreen = null; render(true); break;
     case 'start-final': await startFinalRound(); break;
     case 'submit-final-bid': await submitFinalBid(); break;
+    case 'submit-final-answer': await submitFinalAnswer(); break;
+    case 'start-final-answer-phase': await startFinalAnswerPhase(); break;
     case 'go-final-reveal': await goFinalReveal(); break;
     case 'judge-final': await judgeFinalPlayer(el.dataset.player, el.dataset.verdict); break;
     case 'finalize-final': await finalizeFinal(); break;
@@ -2444,25 +2539,56 @@ async function startFinalRound(){
     currentRound: 'final',
     finalQ: { category: fq.category.trim(), q: fq.q.trim(), a: fq.a.trim() },
     finalBids: {},
-    finalJudgement: {}
+    finalJudgement: {},
+    finalPhaseDeadline: null,
   });
   state.subScreen = null;
   state.setupFinalQ = {category:'', q:'', a:''};
   render(true);
 }
 
+// Timeout for final_answer phase (90 sec to write answer)
+async function timeoutFinalPhase(){
+  const fresh = await getRoom(state.code);
+  if (!fresh) return;
+  if (fresh.status !== 'final_answer') return;
+  if (!fresh.finalPhaseDeadline || Date.now() < fresh.finalPhaseDeadline) return;
+  await update(ref(db, `rooms/${state.code}`), {
+    status: 'final_reveal',
+    finalPhaseDeadline: null,
+  });
+}
+
 async function submitFinalBid(){
   const r = state.room;
   if (!r || state.isHost) return;
+  if (r.status !== 'final_bid') return;
   const me = r.players?.[state.myId];
   if (!me) return;
   const maxBid = Math.max(0, me.score || 0);
   const bid = state.finalBidLocal;
-  const ans = (state.finalAnswerLocal || '').trim();
   if (!Number.isInteger(bid) || bid < 0 || bid > maxBid) return;
+  await update(ref(db, `rooms/${state.code}/finalBids/${state.myId}`), {
+    bid, bidSubmitted: true, bidSubmittedAt: Date.now()
+  });
+}
+
+async function submitFinalAnswer(){
+  const r = state.room;
+  if (!r || state.isHost) return;
+  if (r.status !== 'final_answer') return;
+  const ans = (state.finalAnswerLocal || '').trim();
   if (!ans) return;
   await update(ref(db, `rooms/${state.code}/finalBids/${state.myId}`), {
-    bid, answer: ans, submitted: true, submittedAt: Date.now()
+    answer: ans, answerSubmitted: true, answerSubmittedAt: Date.now()
+  });
+}
+
+async function startFinalAnswerPhase(){
+  if (!state.isHost) return;
+  await update(ref(db, `rooms/${state.code}`), {
+    status: 'final_answer',
+    finalPhaseDeadline: Date.now() + FINAL_SECONDS * 1000,
   });
 }
 
@@ -2485,7 +2611,7 @@ async function finalizeFinal(){
   const judgement = r.finalJudgement || {};
   // Apply verdicts to scores (if any)
   for (const [pid, sub] of Object.entries(bids)) {
-    if (!sub || !sub.submitted) continue;
+    if (!sub || !sub.answerSubmitted) continue;
     const verdict = judgement[pid];
     if (verdict === 'correct') {
       players[pid] = { ...players[pid], score: (players[pid].score||0) + sub.bid };
@@ -2600,24 +2726,46 @@ async function init(){
 
 init();
 
+// ============== INCREMENTAL UI UPDATES (no full re-render) ==============
+function updateFinalSubmitButton(){
+  const r = state.room;
+  if (!r) return;
+  const me = r.players?.[state.myId];
+  if (!me) return;
+  const myScore = Math.max(0, me.score || 0);
+  const bid = state.finalBidLocal;
+  const ans = (state.finalAnswerLocal || '').trim();
+  const validBid = Number.isInteger(bid) && bid >= 0 && bid <= myScore;
+  const btn = document.getElementById('final-submit-btn');
+  const err = document.getElementById('final-bid-err');
+  if (err) err.style.display = validBid ? 'none' : 'block';
+  if (btn) {
+    if (!validBid || !ans) btn.setAttribute('disabled', '');
+    else btn.removeAttribute('disabled');
+  }
+}
+
 // ============== TIMER TICK ==============
 // Re-render every 250ms while a timer is running so the countdown updates,
 // and have the host fire timeouts when deadlines pass.
 function updateTimerOnly(){
   const r = state.room;
-  if (!r || r.status !== 'question') return;
+  if (!r) return;
   const now = Date.now();
-  let sec, pct, total;
-  if (r.questionState === 'buzzing' && r.buzzPhaseDeadline) {
+  let sec, total;
+  if (r.status === 'question' && r.questionState === 'buzzing' && r.buzzPhaseDeadline) {
     sec = Math.max(0, Math.ceil((r.buzzPhaseDeadline - now) / 1000));
     total = BUZZ_SECONDS;
-  } else if (r.questionState === 'answering' && r.answerPhaseDeadline) {
+  } else if (r.status === 'question' && r.questionState === 'answering' && r.answerPhaseDeadline) {
     sec = Math.max(0, Math.ceil((r.answerPhaseDeadline - now) / 1000));
     total = ANSWER_SECONDS;
+  } else if (r.status === 'final_answer' && r.finalPhaseDeadline) {
+    sec = Math.max(0, Math.ceil((r.finalPhaseDeadline - now) / 1000));
+    total = FINAL_SECONDS;
   } else {
     return;
   }
-  pct = Math.min(100, (sec / total) * 100);
+  const pct = Math.min(100, (sec / total) * 100);
   const secEl = document.getElementById('timer-sec');
   const fillEl = document.getElementById('timer-fill');
   if (secEl) secEl.textContent = sec;
@@ -2627,17 +2775,24 @@ function updateTimerOnly(){
 setInterval(() => {
   const r = state.room;
   if (!r) return;
-  if (r.status !== 'question') return;
   const now = Date.now();
-  if (r.questionState === 'buzzing' && r.buzzPhaseDeadline) {
-    if (now >= r.buzzPhaseDeadline) {
-      if (state.isHost) timeoutBuzzPhase();
-    } else {
-      updateTimerOnly();
+  if (r.status === 'question') {
+    if (r.questionState === 'buzzing' && r.buzzPhaseDeadline) {
+      if (now >= r.buzzPhaseDeadline) {
+        if (state.isHost) timeoutBuzzPhase();
+      } else {
+        updateTimerOnly();
+      }
+    } else if (r.questionState === 'answering' && r.answerPhaseDeadline) {
+      if (now >= r.answerPhaseDeadline) {
+        if (state.isHost) timeoutAnswerPhase();
+      } else {
+        updateTimerOnly();
+      }
     }
-  } else if (r.questionState === 'answering' && r.answerPhaseDeadline) {
-    if (now >= r.answerPhaseDeadline) {
-      if (state.isHost) timeoutAnswerPhase();
+  } else if (r.status === 'final_answer' && r.finalPhaseDeadline) {
+    if (now >= r.finalPhaseDeadline) {
+      if (state.isHost) timeoutFinalPhase();
     } else {
       updateTimerOnly();
     }
