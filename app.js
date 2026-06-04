@@ -31,9 +31,13 @@ const CATS_PER_BOARD = 6;
 const QS_PER_CAT = 5;
 const MAX_IMG_SIZE = 700;     // max width/height px (compromise: visible but compact)
 const MAX_IMG_BYTES = 90_000; // ~90KB target after compression (was 150KB)
-const BUZZ_SECONDS = 30;       // total time to buzz in
-const ANSWER_SECONDS = 15;     // time to answer once buzzed
+const BUZZ_SECONDS = 30;       // total time to buzz in (default)
+const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
+
+// Read room's configured timers, falling back to defaults
+function buzzSec(r){ return (r && r.buzzSecondsConfig) || BUZZ_SECONDS; }
+function answerSec(r){ return (r && r.answerSecondsConfig) || ANSWER_SECONDS; }
 
 // Sample pack (used when "Готовий пак" selected)
 const SAMPLE_PACK = {
@@ -115,6 +119,8 @@ let state = {
   // Rounds & final
   setupRoundsTotal: null,
   setupCurrentRound: 1,
+  setupBuzzSeconds: 30,    // host-configured: time to buzz in
+  setupAnswerSeconds: 15,  // host-configured: time to answer
   setupFinalQ: { category:'', q:'', a:'' },
   finalBidLocal: 0,
   finalAnswerLocal: '',
@@ -642,6 +648,8 @@ function computeHash(){
     savedPacks: state.savedPacks.length,
     setupRoundsTotal: state.setupRoundsTotal,
     setupCurrentRound: state.setupCurrentRound,
+    setupBuzzSeconds: state.setupBuzzSeconds,
+    setupAnswerSeconds: state.setupAnswerSeconds,
     setupFinalQ: state.setupFinalQ,
     editingScorePlayerId: state.editingScorePlayerId,
     room: r ? {
@@ -845,11 +853,25 @@ function viewLobby(){
 
 function viewModeSelect(){
   const r = state.room;
+  const buzzOpts = [10, 20, 30, 45, 60];
+  const answerOpts = [5, 10, 15, 20, 30];
+  const renderChips = (opts, cur, action) => opts.map(v =>
+    `<button class="timer-chip ${cur === v ? 'active' : ''}" data-action="${action}" data-sec="${v}">${v}с</button>`
+  ).join('');
   return `
     <button class="back-btn" data-action="leave-mode-select">${icon('arrowLeft',16)} Назад в лоббі</button>
     <div class="container slide-up">
-      <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-bottom:8px;">Скільки раундів?</h2>
+      <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-bottom:8px;">Налаштування гри</h2>
       <p style="color:var(--ink-dim); margin-bottom:32px;">Кожен раунд — нова дошка з новим паком. Кожен наступний раунд дає більше очків.</p>
+
+      <div class="card" style="margin-bottom:16px;">
+        <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px;">⏱ ЧАС НА НАТИСКАННЯ БАЗЕРА</div>
+        <div class="timer-chip-row">${renderChips(buzzOpts, state.setupBuzzSeconds, 'set-buzz-sec')}</div>
+        <div style="font-size:13px; color:var(--ink-dim); margin-top:16px; margin-bottom:8px;">⏱ ЧАС НА ВІДПОВІДЬ (після натискання)</div>
+        <div class="timer-chip-row">${renderChips(answerOpts, state.setupAnswerSeconds, 'set-answer-sec')}</div>
+      </div>
+
+      <p style="color:var(--ink-dim); margin-bottom:12px; font-size:13px;">Тепер обери кількість раундів — це почне гру:</p>
       <div style="display:grid; gap:12px;">
         <button class="source-card" data-action="pick-rounds" data-rounds="1">
           <div class="source-icon gold">${icon('package',22)}</div>
@@ -1262,7 +1284,7 @@ function viewQuestion(){
           const now = Date.now();
           if (r.questionState === 'buzzing' && r.buzzPhaseDeadline) {
             const sec = Math.max(0, Math.ceil((r.buzzPhaseDeadline - now) / 1000));
-            const pct = Math.min(100, (sec / BUZZ_SECONDS) * 100);
+            const pct = Math.min(100, (sec / buzzSec(r)) * 100);
             return `<div class="timer-bar" id="timer-bar">
               <div class="timer-bar-label">⏱ Натиснути баззер: <b id="timer-sec">${sec}</b> сек</div>
               <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--accent);"></div></div>
@@ -1270,7 +1292,7 @@ function viewQuestion(){
           }
           if (r.questionState === 'answering' && r.answerPhaseDeadline) {
             const sec = Math.max(0, Math.ceil((r.answerPhaseDeadline - now) / 1000));
-            const pct = Math.min(100, (sec / ANSWER_SECONDS) * 100);
+            const pct = Math.min(100, (sec / answerSec(r)) * 100);
             return `<div class="timer-bar" id="timer-bar">
               <div class="timer-bar-label">⏱ Відповідь: <b id="timer-sec">${sec}</b> сек</div>
               <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--gold);"></div></div>
@@ -1881,6 +1903,12 @@ async function handleAction(e){
       state.subScreen = 'questionSetup';
       state.setupSource = null;
       render(true); break;
+    case 'set-buzz-sec':
+      state.setupBuzzSeconds = parseInt(el.dataset.sec, 10);
+      render(true); break;
+    case 'set-answer-sec':
+      state.setupAnswerSeconds = parseInt(el.dataset.sec, 10);
+      render(true); break;
     case 'go-question-setup': state.subScreen = 'questionSetup'; state.setupSource = null; state.setupErr=''; render(true); break;
     case 'leave-question-setup': state.subScreen = state.setupCurrentRound === 1 ? 'modeSelect' : null; render(true); break;
     case 'set-source':
@@ -2223,6 +2251,8 @@ async function startGame(pack){
     patch.finalQ = null;
     patch.finalBids = null;
     patch.finalJudgement = null;
+    patch.buzzSecondsConfig = state.setupBuzzSeconds || BUZZ_SECONDS;
+    patch.answerSecondsConfig = state.setupAnswerSeconds || ANSWER_SECONDS;
   }
   await update(ref(db, `rooms/${state.code}`), patch);
   state.subScreen = null;
@@ -2267,9 +2297,8 @@ async function pickCell(ci, qi){
     currentCell: {ci, qi},
     buzzedPlayer: null,
     attemptedBy: [],
-    // Open buzzer for everyone immediately, start 30s timer
     questionState: 'buzzing',
-    buzzPhaseDeadline: now + BUZZ_SECONDS * 1000,
+    buzzPhaseDeadline: now + buzzSec(r) * 1000,
     buzzPhaseRemainingMs: null,
     answerPhaseDeadline: null,
     revealAnswer: false,
@@ -2280,10 +2309,11 @@ async function pickCell(ci, qi){
 async function openBuzz(){
   // Retained for backwards compat (now unused, but harmless)
   if (!state.isHost) return;
+  const r = state.room;
   const now = Date.now();
   await update(ref(db, `rooms/${state.code}`), {
     questionState: 'buzzing',
-    buzzPhaseDeadline: now + BUZZ_SECONDS * 1000,
+    buzzPhaseDeadline: now + buzzSec(r) * 1000,
   });
 }
 
@@ -2298,16 +2328,14 @@ async function buzz(){
   const fresh = await getRoom(state.code);
   if (!fresh || fresh.buzzedPlayer || (fresh.attemptedBy||[]).includes(state.myId)) return;
   if (fresh.questionState !== 'buzzing') return;
-  // Check buzz phase deadline hasn't passed
   if (fresh.buzzPhaseDeadline && Date.now() > fresh.buzzPhaseDeadline) return;
-  // Pause buzz timer, start answer timer
   const now = Date.now();
-  const remaining = fresh.buzzPhaseDeadline ? Math.max(0, fresh.buzzPhaseDeadline - now) : BUZZ_SECONDS * 1000;
+  const remaining = fresh.buzzPhaseDeadline ? Math.max(0, fresh.buzzPhaseDeadline - now) : buzzSec(fresh) * 1000;
   await update(ref(db, `rooms/${state.code}`), {
     buzzedPlayer: state.myId,
     questionState: 'answering',
     buzzPhaseRemainingMs: remaining,
-    answerPhaseDeadline: now + ANSWER_SECONDS * 1000,
+    answerPhaseDeadline: now + answerSec(fresh) * 1000,
   });
 }
 
@@ -2347,7 +2375,7 @@ async function judge(correctStr){
       patch.answerPhaseDeadline = null;
     } else {
       patch.questionState = 'buzzing';
-      const remaining = r.buzzPhaseRemainingMs || (BUZZ_SECONDS * 1000);
+      const remaining = r.buzzPhaseRemainingMs || (buzzSec(r) * 1000);
       patch.buzzPhaseDeadline = Date.now() + remaining;
       patch.buzzPhaseRemainingMs = null;
       patch.answerPhaseDeadline = null;
@@ -2367,7 +2395,7 @@ async function judge(correctStr){
       patch.answerPhaseDeadline = null;
     } else {
       patch.questionState = 'buzzing';
-      const remaining = r.buzzPhaseRemainingMs || (BUZZ_SECONDS * 1000);
+      const remaining = r.buzzPhaseRemainingMs || (buzzSec(r) * 1000);
       patch.buzzPhaseDeadline = Date.now() + remaining;
       patch.buzzPhaseRemainingMs = null;
       patch.answerPhaseDeadline = null;
@@ -2428,7 +2456,7 @@ async function timeoutAnswerPhase(){
       answerPhaseDeadline: null,
     });
   } else {
-    const remaining = fresh.buzzPhaseRemainingMs || (BUZZ_SECONDS * 1000);
+    const remaining = fresh.buzzPhaseRemainingMs || (buzzSec(fresh) * 1000);
     await update(ref(db, `rooms/${state.code}`), {
       players,
       attemptedBy: newAttempted,
@@ -2755,10 +2783,10 @@ function updateTimerOnly(){
   let sec, total;
   if (r.status === 'question' && r.questionState === 'buzzing' && r.buzzPhaseDeadline) {
     sec = Math.max(0, Math.ceil((r.buzzPhaseDeadline - now) / 1000));
-    total = BUZZ_SECONDS;
+    total = buzzSec(r);
   } else if (r.status === 'question' && r.questionState === 'answering' && r.answerPhaseDeadline) {
     sec = Math.max(0, Math.ceil((r.answerPhaseDeadline - now) / 1000));
-    total = ANSWER_SECONDS;
+    total = answerSec(r);
   } else if (r.status === 'final_answer' && r.finalPhaseDeadline) {
     sec = Math.max(0, Math.ceil((r.finalPhaseDeadline - now) / 1000));
     total = FINAL_SECONDS;
