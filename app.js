@@ -127,6 +127,8 @@ let state = {
   // Host can manually edit any player's score
   editingScorePlayerId: null,
   scoreEditInputValue: '',
+  // Format help modal
+  showFormatHelp: false,
   lastRenderHash: '',
   unsubscribeRoom: null,
 };
@@ -652,6 +654,7 @@ function computeHash(){
     setupAnswerSeconds: state.setupAnswerSeconds,
     setupFinalQ: state.setupFinalQ,
     editingScorePlayerId: state.editingScorePlayerId,
+    showFormatHelp: state.showFormatHelp,
     room: r ? {
       status: r.status, hostId: r.hostId,
       players: r.players, currentCell: r.currentCell,
@@ -713,6 +716,10 @@ function render(force){
   // Overlay: score edit modal (host only)
   if (state.editingScorePlayerId && state.isHost && state.room && state.room.players) {
     html += viewScoreEditModal();
+  }
+  // Overlay: format help modal
+  if (state.showFormatHelp) {
+    html += viewFormatHelpModal();
   }
 
   appEl.innerHTML = html;
@@ -1006,20 +1013,17 @@ function viewSetupFile(){
       </div>
       <input type="file" id="file-input" accept=".docx,.txt" style="display:none;">
 
-      <div class="format-hint">Формат файлу:
-
-# Кіно
-200 | У якій країні зняли «Паразити»? | Південна Корея
-400 | Хто зіграв Нео? | Кіану Рівз
-
-# Історія
-200 | ... | ...
-
-📷 КАРТИНКИ у .docx:
-• Картинка В РЯДКУ питання → буде картинкою ПИТАННЯ
-• Картинка у НАСТУПНОМУ абзаці після рядка → буде картинкою ВІДПОВІДІ
-
-(6 категорій × 5 питань. Бали: 200/400/600/800/1000)</div>
+      <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
+        <a class="btn btn-ghost btn-sm" href="template.docx" download="template.docx" style="text-decoration:none; flex:1; min-width:140px;">
+          ${icon('upload',14)} Шаблон .docx (з картинками)
+        </a>
+        <a class="btn btn-ghost btn-sm" href="template.txt" download="template.txt" style="text-decoration:none; flex:1; min-width:140px;">
+          ${icon('file',14)} Шаблон .txt
+        </a>
+        <button class="btn btn-ghost btn-sm" data-action="show-format-help" style="flex:1; min-width:140px;">
+          ${icon('eye',14)} Як зробити свій пак?
+        </button>
+      </div>
 
       ${state.setupErr ? `<div class="err-text">${esc(state.setupErr)}</div>` : ''}
       ${state.setupLoading ? `<div class="info-text"><span class="spin">${icon('loader',16)}</span> Парсимо файл...</div>` : ''}
@@ -1744,6 +1748,81 @@ function viewFinalReveal(){
   `;
 }
 
+// ============== FORMAT HELP MODAL ==============
+function viewFormatHelpModal(){
+  return `
+    <div class="modal-backdrop" data-action="close-format-help">
+      <div class="modal" data-stop="1" style="max-width: 560px; max-height: 85vh; overflow-y: auto;">
+        <div class="modal-title">📚 Як зробити свій пак?</div>
+        <div class="modal-subtitle">Інструкція + приклади</div>
+
+        <div style="margin-top: 16px;">
+          <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">1. Структура файлу</div>
+          <div style="font-size:14px; line-height:1.6; color:var(--ink-dim); margin-bottom:16px;">
+            Файл має містити <b style="color:var(--ink);">6 категорій × 5 питань</b> = 30 питань на раунд.
+            Якщо граєш 2 чи 3 раунди — для кожного раунду окремий файл.
+          </div>
+
+          <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">2. Назва категорії</div>
+          <div style="background:var(--soft); padding:10px 14px; border-radius:8px; font-family:ui-monospace,monospace; font-size:13px; margin-bottom:8px;">
+# Кіно
+          </div>
+          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:16px;">
+            Починається з <code style="background:var(--soft); padding:1px 5px; border-radius:3px;">#</code> + пробіл + назва.
+          </div>
+
+          <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">3. Питання</div>
+          <div style="background:var(--soft); padding:10px 14px; border-radius:8px; font-family:ui-monospace,monospace; font-size:13px; margin-bottom:8px; white-space:pre-wrap;">200 | У якій країні зняли «Паразити»? | Південна Корея
+400 | Хто зіграв Нео? | Кіану Рівз</div>
+          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:16px;">
+            Формат: <b style="color:var(--ink);">ВАРТІСТЬ | ПИТАННЯ | ВІДПОВІДЬ</b>.
+            Розділювач — символ <code style="background:var(--soft); padding:1px 5px; border-radius:3px;">|</code>.
+            Вартості: <b style="color:var(--ink);">200, 400, 600, 800, 1000</b>.
+          </div>
+
+          <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">4. Картинки (тільки .docx)</div>
+          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px; line-height:1.6;">
+            <b style="color:var(--ink);">📷 Картинка-питання:</b> вставляй картинку прямо В РЯДОК питання (у тому ж абзаці що й текст рядка).
+            <br>
+            <b style="color:var(--ink);">📷 Картинка-відповідь:</b> вставляй картинку в НАСТУПНИЙ абзац після рядка питання (окремим абзацом).
+          </div>
+          <div style="background:var(--soft); padding:10px 14px; border-radius:8px; font-family:ui-monospace,monospace; font-size:12px; margin-bottom:16px; line-height:1.7;">
+200 |  | Кіану Рівз 📷 ← картинка тут = ПИТАННЯ
+<br>
+400 | Прапор якої країни? | Японія
+<br>📷 ← окремий абзац = ВІДПОВІДЬ
+          </div>
+
+          <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">5. Особливі випадки</div>
+          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:16px; line-height:1.7;">
+            • Якщо питання — тільки картинка (без тексту), лиши поле порожнім: <code>200 | | відповідь</code>
+            <br>• Якщо відповідь — тільки картинка, лиши порожнім: <code>200 | питання | </code> + картинка нижче
+            <br>• Якщо у питанні є символ <code>|</code> — заміни його на тире
+            <br>• Можеш лишати порожні рядки між категоріями для зручності
+          </div>
+
+          <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">6. Скачай готовий шаблон</div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <a class="btn btn-gold btn-sm" href="template.docx" download="template.docx" style="text-decoration:none; flex:1; min-width:140px;">
+              ${icon('upload',14)} template.docx
+            </a>
+            <a class="btn btn-ghost btn-sm" href="template.txt" download="template.txt" style="text-decoration:none; flex:1; min-width:140px;">
+              ${icon('file',14)} template.txt
+            </a>
+          </div>
+          <div style="font-size:12px; color:var(--ink-dim); margin-top:8px;">
+            Відкрий шаблон у Word → заміни питання своїми → завантаж на сайт.
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn-ghost" data-action="close-format-help">Закрити</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 // ============== SCORE EDIT MODAL ==============
 function viewScoreEditModal(){
   const r = state.room;
@@ -1982,6 +2061,15 @@ async function handleAction(e){
     case 'score-set-exact':
       e.stopPropagation();
       await applyScoreExact();
+      break;
+    case 'show-format-help':
+      state.showFormatHelp = true;
+      render(true); break;
+    case 'close-format-help':
+      if (el.dataset.action === 'close-format-help') {
+        state.showFormatHelp = false;
+        render(true);
+      }
       break;
   }
 }
