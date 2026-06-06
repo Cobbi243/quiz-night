@@ -763,6 +763,9 @@ function viewHome(){
         <button class="btn btn-accent btn-lg" style="flex:1" data-action="go-host">${icon('plus',20)} Створити кімнату</button>
         <button class="btn btn-ghost btn-lg" style="flex:1" data-action="go-join">${icon('users',20)} Долучитися</button>
       </div>
+      <button class="btn btn-ghost btn-sm" data-action="show-format-help" style="margin-top:16px; background:transparent; border:none; color:var(--ink-dim);">
+        ${icon('eye',14)} Як зробити свій пак з питаннями?
+      </button>
     </div>
   `;
 }
@@ -1013,15 +1016,9 @@ function viewSetupFile(){
       </div>
       <input type="file" id="file-input" accept=".docx,.txt" style="display:none;">
 
-      <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
-        <a class="btn btn-ghost btn-sm" href="template.docx" download="template.docx" style="text-decoration:none; flex:1; min-width:140px;">
-          ${icon('upload',14)} Шаблон .docx (з картинками)
-        </a>
-        <a class="btn btn-ghost btn-sm" href="template.txt" download="template.txt" style="text-decoration:none; flex:1; min-width:140px;">
-          ${icon('file',14)} Шаблон .txt
-        </a>
-        <button class="btn btn-ghost btn-sm" data-action="show-format-help" style="flex:1; min-width:140px;">
-          ${icon('eye',14)} Як зробити свій пак?
+      <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; justify-content:center;">
+        <button class="btn btn-ghost btn-sm" data-action="show-format-help">
+          ${icon('eye',14)} Як зробити свій пак? (з шаблонами)
         </button>
       </div>
 
