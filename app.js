@@ -35,6 +35,61 @@ const BUZZ_SECONDS = 30;       // total time to buzz in (default)
 const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
+// ============== VERSION & CHANGELOG ==============
+const APP_VERSION = '1.8';
+const CHANGELOG = [
+  { v: '1.8', date: '07.06.2026', changes: [
+    'Тільки ведучий вибирає клітинки на дошці (гравці кажуть вголос)',
+    'Можна натиснути базер клавішею Пробіл, не тільки мишкою',
+    'Нова опція: базер відкривається одразу або ведучий відкриває вручну',
+    'Багато гравців тепер у сітці (без горизонтального скролу)',
+    'Довгі імена більше не ламають верстку',
+    'Текст більше не виділяється при кліках по ігровому полю',
+    'Виправлено: ставка у фіналі тепер приймається коректно',
+  ]},
+  { v: '1.7', date: '06.06.2026', changes: [
+    'Двофазний фінал: спершу всі ставлять бали, потім ведучий показує питання',
+    'У фазі відповіді — таймер 90 секунд',
+    'Кнопка «Як зробити свій пак?» винесена на головну сторінку',
+  ]},
+  { v: '1.6', date: '05.06.2026', changes: [
+    'Готові шаблони паків для завантаження (.docx і .txt)',
+    'Модалка-довідка з повними правилами формату',
+  ]},
+  { v: '1.5', date: '04.06.2026', changes: [
+    'Налаштування таймерів перед грою (час на базер і на відповідь)',
+    'Картинки можуть бути не лише у питанні, а й у відповіді',
+    'Покращено розпізнавання багаторядкових питань у .docx',
+  ]},
+  { v: '1.4', date: '02.06.2026', changes: [
+    'Автоматичний баззер: при виборі питання одразу 30 сек на натискання',
+    'Хто натиснув — 15 сек на відповідь, інакше −бали і перехоплення',
+    'Таймери з прогрес-барами без блимання екрану',
+  ]},
+  { v: '1.3', date: '01.06.2026', changes: [
+    'Ведучий може вручну коригувати бали гравцям (клік по чіпу)',
+    'Виправлено збереження паків з картинками у БД',
+    'Захист від кешу: версія додається до файлів',
+  ]},
+  { v: '1.2', date: '29.05.2026', changes: [
+    'Режими 1 / 2 / 3 раунди з множником балів (×1, ×2, ×3)',
+    'Фінальний раунд зі ставками балами',
+    'Між раундами бали переносяться, нова дошка',
+  ]},
+  { v: '1.1', date: '29.05.2026', changes: [
+    'Завантаження паків з .docx та .txt файлів',
+    'Підтримка картинок у питаннях',
+    'AI-генерація питань (потребує API ключ)',
+    'Збереження своїх паків у базі',
+    'Ведучого приховано зі списку гравців',
+  ]},
+  { v: '1.0', date: '29.05.2026', changes: [
+    'Перший реліз: онлайн-мультиплеєр на Firebase',
+    'Дошка Jeopardy 6×5, баззер-механіка',
+    'Анонімна авторизація, реконект при перезавантаженні',
+  ]},
+];
+
 // Read room's configured timers, falling back to defaults
 function buzzSec(r){ return (r && r.buzzSecondsConfig) || BUZZ_SECONDS; }
 function answerSec(r){ return (r && r.answerSecondsConfig) || ANSWER_SECONDS; }
@@ -121,6 +176,7 @@ let state = {
   setupCurrentRound: 1,
   setupBuzzSeconds: 30,    // host-configured: time to buzz in
   setupAnswerSeconds: 15,  // host-configured: time to answer
+  setupManualBuzz: false,  // host opens buzzer manually vs auto
   setupFinalQ: { category:'', q:'', a:'' },
   finalBidLocal: 0,
   finalAnswerLocal: '',
@@ -129,6 +185,7 @@ let state = {
   scoreEditInputValue: '',
   // Format help modal
   showFormatHelp: false,
+  showChangelog: false,
   lastRenderHash: '',
   unsubscribeRoom: null,
 };
@@ -652,9 +709,11 @@ function computeHash(){
     setupCurrentRound: state.setupCurrentRound,
     setupBuzzSeconds: state.setupBuzzSeconds,
     setupAnswerSeconds: state.setupAnswerSeconds,
+    setupManualBuzz: state.setupManualBuzz,
     setupFinalQ: state.setupFinalQ,
     editingScorePlayerId: state.editingScorePlayerId,
     showFormatHelp: state.showFormatHelp,
+    showChangelog: state.showChangelog,
     room: r ? {
       status: r.status, hostId: r.hostId,
       players: r.players, currentCell: r.currentCell,
@@ -721,6 +780,12 @@ function render(force){
   if (state.showFormatHelp) {
     html += viewFormatHelpModal();
   }
+  // Overlay: changelog modal
+  if (state.showChangelog) {
+    html += viewChangelogModal();
+  }
+  // Always-present version badge (top-right)
+  html += `<button class="version-badge" data-action="show-changelog" title="Що нового">v${APP_VERSION}</button>`;
 
   appEl.innerHTML = html;
   attachListeners();
@@ -879,6 +944,11 @@ function viewModeSelect(){
         <div class="timer-chip-row">${renderChips(buzzOpts, state.setupBuzzSeconds, 'set-buzz-sec')}</div>
         <div style="font-size:13px; color:var(--ink-dim); margin-top:16px; margin-bottom:8px;">⏱ ЧАС НА ВІДПОВІДЬ (після натискання)</div>
         <div class="timer-chip-row">${renderChips(answerOpts, state.setupAnswerSeconds, 'set-answer-sec')}</div>
+        <div style="font-size:13px; color:var(--ink-dim); margin-top:16px; margin-bottom:8px;">🔔 КОЛИ ВІДКРИВАЄТЬСЯ БАЗЕР</div>
+        <div class="timer-chip-row">
+          <button class="timer-chip ${!state.setupManualBuzz ? 'active' : ''}" data-action="set-manual-buzz" data-manual="0" style="flex:1;">Одразу при виборі питання</button>
+          <button class="timer-chip ${state.setupManualBuzz ? 'active' : ''}" data-action="set-manual-buzz" data-manual="1" style="flex:1;">Ведучий відкриває вручну</button>
+        </div>
       </div>
 
       <p style="color:var(--ink-dim); margin-bottom:12px; font-size:13px;">Тепер обери кількість раундів — це почне гру:</p>
@@ -1182,7 +1252,7 @@ function viewBoard(){
   const nonHostPlayers = players.filter(p => p.id !== r.hostId);
   const picker = players.find(p => p.id === r.currentPicker);
   const isMyPick = r.currentPicker === state.myId;
-  const canPick = state.isHost || isMyPick;
+  const canPick = state.isHost; // only host picks cells now
   const cats = r.pack.categories;
 
   return `
@@ -1197,7 +1267,7 @@ function viewBoard(){
       </div>
       ${picker ? `
         <div class="picker-banner">
-          ${isMyPick ? `<b>Твоя черга обирати!</b>` : `Обирає: <b>${esc(picker.avatar)} ${esc(picker.name)}</b>${state.isHost ? ' (або обери ти, як ведучий)' : ''}`}
+          ${isMyPick ? `<b>Обирають твоє питання!</b> Скажи ведучому яку клітинку` : `Обирає: <b>${esc(picker.avatar)} ${esc(picker.name)}</b>${state.isHost ? ' — натисни клітинку яку він назве' : ''}`}
         </div>
       ` : ''}
       <div class="board-wrap">
@@ -1302,6 +1372,17 @@ function viewQuestion(){
           return '';
         })()}
 
+        ${r.questionState === 'reading' ? (state.isHost ? `
+          <div style="text-align:center;">
+            <button class="btn btn-accent btn-lg" data-action="open-buzz">${icon('play',18)} Відкрити баззер для гравців</button>
+            <div style="margin-top:8px; font-size:12px; color:var(--ink-dim);">Прочитай питання вголос, потім відкрий баззер</div>
+          </div>
+        ` : `
+          <div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:16px;">
+            ⏳ Ведучий читає питання... баззер скоро відкриється
+          </div>
+        `) : ''}
+
         ${buzzed ? `
           <div class="buzzed-banner">
             <div class="buzzed-banner-label">ВІДПОВІДАЄ</div>
@@ -1319,6 +1400,7 @@ function viewQuestion(){
           <button class="buzz-btn" data-action="buzz" ${!canIBuzz?'disabled':''}>
             ${iAttempted ? 'Ти вже відповідав' : 'НАТИСНИ ЩОБ ВІДПОВІСТИ'}
           </button>
+          ${!iAttempted ? `<div style="text-align:center; margin-top:8px; font-size:12px; color:var(--ink-dim);">або натисни <b>Пробіл</b> на клавіатурі</div>` : ''}
         ` : '')}
 
         ${state.isHost && r.questionState === 'buzzing' && !buzzed ? `
@@ -1747,6 +1829,35 @@ function viewFinalReveal(){
 }
 
 // ============== FORMAT HELP MODAL ==============
+// ============== CHANGELOG MODAL ==============
+function viewChangelogModal(){
+  return `
+    <div class="modal-backdrop" data-action="close-changelog">
+      <div class="modal" data-stop="1" style="max-width: 540px; max-height: 85vh; overflow-y: auto;">
+        <div class="modal-title">📋 Що нового</div>
+        <div class="modal-subtitle">Quiz Night · поточна версія v${APP_VERSION}</div>
+        <div style="margin-top: 16px;">
+          ${CHANGELOG.map((entry, i) => `
+            <div style="margin-bottom: 20px;">
+              <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                <span style="font-family:'Fraunces',serif; font-weight:900; font-size:18px; color:${i===0?'var(--gold)':'var(--ink)'};">v${entry.v}</span>
+                ${i===0 ? `<span style="background:var(--gold); color:var(--bg); font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px; letter-spacing:0.05em;">ОСТАННЯ</span>` : ''}
+                <span style="font-size:12px; color:var(--ink-faint);">${entry.date}</span>
+              </div>
+              <ul style="margin:0; padding-left:18px; color:var(--ink-dim); font-size:13px; line-height:1.7;">
+                ${entry.changes.map(c => `<li>${esc(c)}</li>`).join('')}
+              </ul>
+            </div>
+          `).join('')}
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" data-action="close-changelog">Закрити</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function viewFormatHelpModal(){
   return `
     <div class="modal-backdrop" data-action="close-format-help">
@@ -1986,6 +2097,9 @@ async function handleAction(e){
     case 'set-answer-sec':
       state.setupAnswerSeconds = parseInt(el.dataset.sec, 10);
       render(true); break;
+    case 'set-manual-buzz':
+      state.setupManualBuzz = el.dataset.manual === '1';
+      render(true); break;
     case 'go-question-setup': state.subScreen = 'questionSetup'; state.setupSource = null; state.setupErr=''; render(true); break;
     case 'leave-question-setup': state.subScreen = state.setupCurrentRound === 1 ? 'modeSelect' : null; render(true); break;
     case 'set-source':
@@ -2066,6 +2180,15 @@ async function handleAction(e){
     case 'close-format-help':
       if (el.dataset.action === 'close-format-help') {
         state.showFormatHelp = false;
+        render(true);
+      }
+      break;
+    case 'show-changelog':
+      state.showChangelog = true;
+      render(true); break;
+    case 'close-changelog':
+      if (el.dataset.action === 'close-changelog') {
+        state.showChangelog = false;
         render(true);
       }
       break;
@@ -2339,6 +2462,7 @@ async function startGame(pack){
     patch.finalJudgement = null;
     patch.buzzSecondsConfig = state.setupBuzzSeconds || BUZZ_SECONDS;
     patch.answerSecondsConfig = state.setupAnswerSeconds || ANSWER_SECONDS;
+    patch.manualBuzzConfig = !!state.setupManualBuzz;
   }
   await update(ref(db, `rooms/${state.code}`), patch);
   state.subScreen = null;
@@ -2376,24 +2500,32 @@ function copyCode(){
 async function pickCell(ci, qi){
   const r = state.room;
   if (!r) return;
+  if (!state.isHost) return; // only host picks
   if (r.usedCells && r.usedCells[`${ci}-${qi}`]) return;
-  if (!state.isHost && state.myId !== r.currentPicker) return;
   const now = Date.now();
-  await update(ref(db, `rooms/${state.code}`), {
+  // If host controls buzzer timing, open question in "reading" state (buzzer closed).
+  // Otherwise buzzer opens immediately with the timer running.
+  const manualBuzz = !!r.manualBuzzConfig;
+  const patch = {
     currentCell: {ci, qi},
     buzzedPlayer: null,
     attemptedBy: [],
-    questionState: 'buzzing',
-    buzzPhaseDeadline: now + buzzSec(r) * 1000,
     buzzPhaseRemainingMs: null,
     answerPhaseDeadline: null,
     revealAnswer: false,
     status: 'question'
-  });
+  };
+  if (manualBuzz) {
+    patch.questionState = 'reading'; // host will press "open buzzer"
+    patch.buzzPhaseDeadline = null;
+  } else {
+    patch.questionState = 'buzzing';
+    patch.buzzPhaseDeadline = now + buzzSec(r) * 1000;
+  }
+  await update(ref(db, `rooms/${state.code}`), patch);
 }
 
 async function openBuzz(){
-  // Retained for backwards compat (now unused, but harmless)
   if (!state.isHost) return;
   const r = state.room;
   const now = Date.now();
@@ -2853,22 +2985,50 @@ async function init(){
 
 init();
 
+// ============== KEYBOARD: spacebar to buzz ==============
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space' && e.key !== ' ') return;
+  // Don't hijack space when typing in an input/textarea
+  const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+  if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) return;
+  const r = state.room;
+  if (!r) return;
+  // Player can buzz with space during buzzing phase
+  if (r.status === 'question' && r.questionState === 'buzzing' && !state.isHost) {
+    if (r.buzzedPlayer) return;
+    if ((r.attemptedBy||[]).includes(state.myId)) return;
+    e.preventDefault();
+    buzz();
+  }
+});
+
+
 // ============== INCREMENTAL UI UPDATES (no full re-render) ==============
 function updateFinalSubmitButton(){
   const r = state.room;
   if (!r) return;
   const me = r.players?.[state.myId];
   if (!me) return;
-  const myScore = Math.max(0, me.score || 0);
-  const bid = state.finalBidLocal;
-  const ans = (state.finalAnswerLocal || '').trim();
-  const validBid = Number.isInteger(bid) && bid >= 0 && bid <= myScore;
   const btn = document.getElementById('final-submit-btn');
   const err = document.getElementById('final-bid-err');
-  if (err) err.style.display = validBid ? 'none' : 'block';
-  if (btn) {
-    if (!validBid || !ans) btn.setAttribute('disabled', '');
-    else btn.removeAttribute('disabled');
+
+  if (r.status === 'final_bid') {
+    // Phase 1: only the bid matters
+    const myScore = Math.max(0, me.score || 0);
+    const bid = state.finalBidLocal;
+    const validBid = Number.isInteger(bid) && bid >= 0 && bid <= myScore;
+    if (err) err.style.display = validBid ? 'none' : 'block';
+    if (btn) {
+      if (!validBid) btn.setAttribute('disabled', '');
+      else btn.removeAttribute('disabled');
+    }
+  } else if (r.status === 'final_answer') {
+    // Phase 2: only the answer text matters
+    const ans = (state.finalAnswerLocal || '').trim();
+    if (btn) {
+      if (!ans) btn.setAttribute('disabled', '');
+      else btn.removeAttribute('disabled');
+    }
   }
 }
 

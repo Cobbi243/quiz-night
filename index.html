@@ -465,6 +465,53 @@ html, body {
   background: var(--gold); color: var(--bg); border-color: var(--gold);
 }
 
+/* Prevent accidental text selection in interactive game areas */
+.q-stage, .buzz-btn, .buzzed-banner, .player-bar, .board, .host-controls, .timer-bar {
+  -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none;
+}
+
+/* Player bar: wrap into a grid so many players don't cause horizontal scroll */
+.player-bar {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 24px;
+  overflow: visible !important;
+  padding-bottom: 0 !important;
+}
+.player-chip {
+  min-width: 0 !important;
+  flex-shrink: 1 !important;
+}
+.player-chip-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* VERSION BADGE (top-right floating) */
+.version-badge {
+  position: fixed;
+  top: 12px; right: 12px;
+  z-index: 90;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  color: var(--ink-dim);
+  font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+  font-size: 12px; font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s;
+  backdrop-filter: blur(8px);
+}
+.version-badge:hover {
+  background: var(--gold);
+  color: var(--bg);
+  border-color: var(--gold);
+}
+
 </style>
 </head>
 <body>
@@ -475,6 +522,6 @@ html, body {
     <div style="margin-top:16px; color:var(--ink-dim);">Завантаження...</div>
   </div>
 </div>
-<script type="module" src="app.js?v=202606070012"></script>
+<script type="module" src="app.js?v=202606071911"></script>
 </body>
 </html>
