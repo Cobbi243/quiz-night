@@ -1693,21 +1693,22 @@ function viewFinalReveal(){
               </div>`;
             }
             const verdict = judgement[p.id];
+            const safeBid = (typeof sub.bid === 'number' && !isNaN(sub.bid)) ? sub.bid : 0;
             return `<div class="card" style="margin-bottom:12px; ${verdict === 'correct' ? 'border-color:rgba(74,222,128,0.4);' : verdict === 'wrong' ? 'border-color:rgba(232,74,48,0.4);' : ''}">
               <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
                 <span style="font-size:24px;">${p.avatar}</span>
                 <div style="flex:1;"><b>${esc(p.name)}</b></div>
-                <div style="font-family:'Fraunces',serif; font-weight:700; color:var(--gold);">Ставка: ${sub.bid}</div>
+                <div style="font-family:'Fraunces',serif; font-weight:700; color:var(--gold);">Ставка: ${safeBid}</div>
               </div>
               <div style="background:var(--soft); padding:10px 12px; border-radius:8px; font-family:'Fraunces',serif; font-size:18px; font-weight:700; margin-bottom:12px;">
                 ${esc(sub.answer)}
               </div>
               <div style="display:flex; gap:8px;">
                 <button class="btn ${verdict==='correct'?'btn-green':'btn-ghost'} btn-sm" style="flex:1;" data-action="judge-final" data-player="${p.id}" data-verdict="correct">
-                  ${icon('check',14)} Правильно (+${sub.bid})
+                  ${icon('check',14)} Правильно (+${safeBid})
                 </button>
                 <button class="btn ${verdict==='wrong'?'btn-red':'btn-ghost'} btn-sm" style="flex:1;" data-action="judge-final" data-player="${p.id}" data-verdict="wrong">
-                  ${icon('x',14)} Неправильно (−${sub.bid})
+                  ${icon('x',14)} Неправильно (−${safeBid})
                 </button>
               </div>
             </div>`;
@@ -2692,7 +2693,12 @@ async function submitFinalAnswer(){
   if (r.status !== 'final_answer') return;
   const ans = (state.finalAnswerLocal || '').trim();
   if (!ans) return;
+  // Ensure bid exists — fall back to 0 if player skipped phase 1
+  const existing = r.finalBids?.[state.myId];
+  const bidVal = (existing && typeof existing.bid === 'number') ? existing.bid : 0;
+  const bidSubmitted = !!(existing && existing.bidSubmitted);
   await update(ref(db, `rooms/${state.code}/finalBids/${state.myId}`), {
+    bid: bidVal, bidSubmitted,
     answer: ans, answerSubmitted: true, answerSubmittedAt: Date.now()
   });
 }
@@ -2726,15 +2732,23 @@ async function finalizeFinal(){
   for (const [pid, sub] of Object.entries(bids)) {
     if (!sub || !sub.answerSubmitted) continue;
     const verdict = judgement[pid];
+    // Robustly coerce bid to a number — guard against undefined / NaN / string
+    const rawBid = sub.bid;
+    const bidNum = (typeof rawBid === 'number' && !isNaN(rawBid)) ? rawBid : parseInt(rawBid, 10);
+    const safeBid = (Number.isFinite(bidNum) ? bidNum : 0);
+    const curScore = players[pid]?.score || 0;
     if (verdict === 'correct') {
-      players[pid] = { ...players[pid], score: (players[pid].score||0) + sub.bid };
+      players[pid] = { ...players[pid], score: curScore + safeBid };
     } else if (verdict === 'wrong') {
-      players[pid] = { ...players[pid], score: (players[pid].score||0) - sub.bid };
+      players[pid] = { ...players[pid], score: curScore - safeBid };
     }
   }
-  await update(ref(db, `rooms/${state.code}`), {
-    players, status: 'results'
-  });
+  try {
+    await update(ref(db, `rooms/${state.code}`), { players, status: 'results' });
+  } catch (e) {
+    console.error('[finalizeFinal] failed:', e);
+    alert('Помилка завершення: ' + (e.message || e));
+  }
 }
 
 // ============== MANUAL SCORE EDIT (host only) ==============
