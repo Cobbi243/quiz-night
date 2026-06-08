@@ -36,8 +36,13 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.9';
+const APP_VERSION = '1.10';
 const CHANGELOG = [
+  { v: '1.10', date: '09.06.2026', changes: [
+    'Доданий чат для всіх гравців — кнопка-бульбашка внизу справа',
+    'Видно непрочитані повідомлення, працює протягом усієї гри',
+    'Можна писати в чат і ведучому, і гравцям (зручно без мікрофона)',
+  ]},
   { v: '1.9', date: '08.06.2026', changes: [
     'Фінальну перевірку тепер бачать усі гравці, а не лише ведучий',
     'Бали у фіналі змінюються наживо — видно як ведучий додає/віднімає',
@@ -192,6 +197,10 @@ let state = {
   // Format help modal
   showFormatHelp: false,
   showChangelog: false,
+  // Chat
+  chatOpen: false,
+  chatInputLocal: '',
+  chatLastSeenTs: 0,
   lastRenderHash: '',
   unsubscribeRoom: null,
 };
@@ -696,6 +705,8 @@ function icon(name, size=18){
     trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
     image: '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
     eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+    chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    send: '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
   };
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[name] || ''}</svg>`;
 }
@@ -720,6 +731,8 @@ function computeHash(){
     editingScorePlayerId: state.editingScorePlayerId,
     showFormatHelp: state.showFormatHelp,
     showChangelog: state.showChangelog,
+    chatOpen: state.chatOpen,
+    chatCount: r && r.chat ? Object.keys(r.chat).length : 0,
     room: r ? {
       status: r.status, hostId: r.hostId,
       players: r.players, currentCell: r.currentCell,
@@ -792,9 +805,20 @@ function render(force){
   }
   // Always-present version badge (top-right)
   html += `<button class="version-badge" data-action="show-changelog" title="Що нового">v${APP_VERSION}</button>`;
+  // Chat widget — visible whenever inside a room
+  if (state.room && state.code) {
+    html += viewChatWidget();
+  }
 
   appEl.innerHTML = html;
   attachListeners();
+
+  // While chat is open, mark all current messages as seen
+  if (state.chatOpen && state.room && state.room.chat) {
+    const msgs = Object.values(state.room.chat);
+    const maxTs = msgs.reduce((m, x) => Math.max(m, x.ts || 0), 0);
+    if (maxTs > state.chatLastSeenTs) state.chatLastSeenTs = maxTs;
+  }
 
   if (focusId) {
     const el = document.getElementById(focusId);
@@ -1847,6 +1871,49 @@ function viewFinalReveal(){
 }
 
 // ============== FORMAT HELP MODAL ==============
+// ============== CHAT WIDGET ==============
+function viewChatWidget(){
+  const r = state.room;
+  const chat = r.chat || {};
+  const msgs = Object.entries(chat)
+    .map(([id, m]) => ({ id, ...m }))
+    .sort((a,b) => (a.ts||0) - (b.ts||0));
+  const lastTs = msgs.length ? msgs[msgs.length-1].ts : 0;
+  const unread = msgs.filter(m => (m.ts||0) > state.chatLastSeenTs && m.uid !== state.myId).length;
+
+  if (!state.chatOpen) {
+    return `
+      <button class="chat-fab" data-action="open-chat" title="Чат">
+        ${icon('chat', 22)}
+        ${unread > 0 ? `<span class="chat-fab-badge">${unread > 9 ? '9+' : unread}</span>` : ''}
+      </button>
+    `;
+  }
+
+  return `
+    <div class="chat-panel">
+      <div class="chat-header">
+        <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px;">💬 Чат</div>
+        <button class="chat-close" data-action="close-chat">${icon('x', 18)}</button>
+      </div>
+      <div class="chat-messages" id="chat-messages">
+        ${msgs.length === 0 ? `<div style="text-align:center; color:var(--ink-faint); font-size:13px; padding:24px 8px;">Поки порожньо. Напиши перше повідомлення 👇</div>` : msgs.map(m => {
+          const mine = m.uid === state.myId;
+          const isHostMsg = m.uid === r.hostId;
+          return `<div class="chat-msg ${mine ? 'mine' : ''}">
+            <div class="chat-msg-meta">${m.avatar || '👤'} ${esc(m.name || '?')}${isHostMsg ? ' 🎙' : ''}</div>
+            <div class="chat-msg-bubble">${esc(m.text)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="chat-input-row">
+        <input class="input" id="chat-input" placeholder="Повідомлення..." value="${esc(state.chatInputLocal || '')}" autocomplete="off" maxlength="300">
+        <button class="btn btn-gold btn-sm" data-action="send-chat" style="white-space:nowrap;">${icon('send', 16)}</button>
+      </div>
+    </div>
+  `;
+}
+
 // ============== CHANGELOG MODAL ==============
 function viewChangelogModal(){
   return `
@@ -2073,6 +2140,17 @@ function attachListeners(){
     state.finalAnswerLocal = e.target.value;
     updateFinalSubmitButton();
   });
+  // Chat input
+  const chatInput = document.getElementById('chat-input');
+  if (chatInput) {
+    chatInput.addEventListener('input', e => { state.chatInputLocal = e.target.value; });
+    chatInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
+    });
+  }
+  // Auto-scroll chat to bottom
+  const chatMsgs = document.getElementById('chat-messages');
+  if (chatMsgs) chatMsgs.scrollTop = chatMsgs.scrollHeight;
   // Score edit modal input
   const seInput = document.getElementById('score-edit-input');
   if (seInput) seInput.addEventListener('input', e => {
@@ -2209,6 +2287,16 @@ async function handleAction(e){
         state.showChangelog = false;
         render(true);
       }
+      break;
+    case 'open-chat':
+      state.chatOpen = true;
+      state.chatLastSeenTs = Date.now();
+      render(true); break;
+    case 'close-chat':
+      state.chatOpen = false;
+      render(true); break;
+    case 'send-chat':
+      await sendChat();
       break;
   }
 }
@@ -2764,7 +2852,8 @@ async function playAgain(){
     currentCell: null, buzzedPlayer: null, attemptedBy: [],
     questionState: null, currentPicker: null, revealAnswer: false,
     roundsTotal: null, currentRound: null,
-    finalQ: null, finalBids: null, finalJudgement: null, finalBaseScores: null
+    finalQ: null, finalBids: null, finalJudgement: null, finalBaseScores: null,
+    chat: null
   });
 }
 
@@ -2871,6 +2960,35 @@ async function startFinalAnswerPhase(){
 async function goFinalReveal(){
   if (!state.isHost) return;
   await update(ref(db, `rooms/${state.code}`), { status: 'final_reveal' });
+}
+
+// ============== CHAT ==============
+async function sendChat(){
+  const r = state.room;
+  if (!r || !state.code) return;
+  const text = (state.chatInputLocal || '').trim();
+  if (!text) return;
+  const msgId = genId();
+  const me = r.players?.[state.myId];
+  const name = state.isHost ? (me?.name || 'Ведучий') : (me?.name || lsGet(LS_NAME) || 'Гравець');
+  const avatar = me?.avatar || (state.isHost ? '🎙' : '👤');
+  const msg = {
+    uid: state.myId,
+    name: name,
+    avatar: avatar,
+    text: text.slice(0, 300),
+    ts: Date.now(),
+  };
+  state.chatInputLocal = '';
+  state.chatLastSeenTs = Date.now();
+  // Clear the input field immediately for responsiveness
+  const inp = document.getElementById('chat-input');
+  if (inp) inp.value = '';
+  try {
+    await set(ref(db, `rooms/${state.code}/chat/${msgId}`), msg);
+  } catch (e) {
+    console.error('[sendChat]', e);
+  }
 }
 
 async function judgeFinalPlayer(playerId, verdict){
