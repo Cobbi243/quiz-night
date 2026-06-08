@@ -36,8 +36,14 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.8';
+const APP_VERSION = '1.9';
 const CHANGELOG = [
+  { v: '1.9', date: '08.06.2026', changes: [
+    'Фінальну перевірку тепер бачать усі гравці, а не лише ведучий',
+    'Бали у фіналі змінюються наживо — видно як ведучий додає/віднімає',
+    'Ведучий може коригувати бали на екрані «раунд завершено»',
+    'Підказка підняти бали тим, хто в мінусі, перед фіналом',
+  ]},
   { v: '1.8', date: '07.06.2026', changes: [
     'Тільки ведучий вибирає клітинки на дошці (гравці кажуть вголос)',
     'Можна натиснути базер клавішею Пробіл, не тільки мишкою',
@@ -1509,16 +1515,24 @@ function viewRoundDone(){
         </h2>
       </div>
       <div class="card" style="margin-bottom:24px;">
-        <div style="font-size:14px; color:var(--ink-dim); margin-bottom:12px;">Поточні бали</div>
+        <div style="font-size:14px; color:var(--ink-dim); margin-bottom:12px;">
+          Поточні бали${state.isHost ? ' · <span style="color:var(--gold);">клікни на гравця щоб змінити бали</span>' : ''}
+        </div>
         ${sorted.map((p, rank) => `
-          <div class="final-row ${rank===0?'first':''}">
+          <div class="final-row ${rank===0?'first':''} ${state.isHost ? 'editable-row' : ''}" ${state.isHost ? `data-action="edit-score" data-player="${p.id}"` : ''}>
             <div class="rank">${rank+1}</div>
             <span style="font-size:24px;">${p.avatar}</span>
             <div class="name">${esc(p.name)}</div>
             <div class="pts ${(p.score||0)<0?'negative':''}">${p.score || 0}</div>
+            ${state.isHost ? `<span style="margin-left:8px; opacity:0.4; font-size:13px;">✏</span>` : ''}
           </div>
         `).join('')}
       </div>
+      ${state.isHost && sorted.some(p => (p.score||0) < 0) ? `
+        <div class="info-text" style="margin-bottom:16px;">
+          💡 У когось мінусові бали — щоб вони могли зробити ставку у фіналі, підніми їм бали (клік по гравцю вище).
+        </div>
+      ` : ''}
       ${state.isHost ? `
         ${isLastRegularRound ? `
           <button class="btn btn-gold btn-lg btn-full" data-action="go-final-setup">${icon('crown',18)} Перейти до фінального раунду</button>
@@ -1749,81 +1763,85 @@ function viewFinalReveal(){
   const nonHost = players.filter(p => p.id !== r.hostId);
   const bids = r.finalBids || {};
   const judgement = r.finalJudgement || {};
+  const base = r.finalBaseScores || {};
 
-  if (state.isHost) {
-    const allJudged = nonHost.every(p => judgement[p.id] === 'correct' || judgement[p.id] === 'wrong' || !bids[p.id]);
-    return `
-      <div class="container slide-up" style="padding-top:24px;">
-        <div class="eyebrow">ФІНАЛ · ПЕРЕВІРКА ВІДПОВІДЕЙ</div>
-        <h2 style="font-family:'Fraunces',serif; font-size:32px; font-weight:700; margin-top:8px;">${esc(r.finalQ.category)}</h2>
-        <div class="card" style="margin-top:16px;">
-          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ПИТАННЯ</div>
-          <div style="font-family:'Fraunces',serif; font-size:20px; font-weight:700; margin-bottom:12px;">${esc(r.finalQ.q)}</div>
-          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ПРАВИЛЬНА ВІДПОВІДЬ</div>
-          <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--green);">${esc(r.finalQ.a)}</div>
+  const allJudged = nonHost.every(p => judgement[p.id] === 'correct' || judgement[p.id] === 'wrong' || !bids[p.id] || !bids[p.id].answerSubmitted);
+
+  // Shared card renderer for one player (host gets judge buttons, players see verdict only)
+  const renderPlayerCard = (p) => {
+    const sub = bids[p.id];
+    const baseScore = base[p.id] != null ? base[p.id] : (p.score || 0);
+    const curScore = p.score || 0;
+    if (!sub || !sub.answerSubmitted) {
+      return `<div class="card" style="margin-bottom:12px; opacity:0.55;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span style="font-size:24px;">${p.avatar}</span>
+          <div style="flex:1; min-width:0;"><b style="display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(p.name)}</b></div>
+          <div style="font-size:13px; color:var(--ink-dim);">${sub && sub.bidSubmitted ? `Ставка ${sub.bid}, без відповіді` : 'Не грав фінал'}</div>
+          <div style="font-family:'Fraunces',serif; font-weight:900; font-size:20px; color:${curScore<0?'var(--accent)':'var(--gold)'};">${curScore}</div>
         </div>
-        <div style="margin-top:24px;">
-          ${nonHost.map(p => {
-            const sub = bids[p.id];
-            if (!sub || !sub.answerSubmitted) {
-              return `<div class="card" style="margin-bottom:12px; opacity:0.5;">
-                <div style="display:flex; align-items:center; gap:8px;">
-                  <span style="font-size:24px;">${p.avatar}</span>
-                  <div style="flex:1;"><b>${esc(p.name)}</b></div>
-                  <div style="font-size:13px; color:var(--ink-dim);">${sub && sub.bidSubmitted ? `Поставив ${sub.bid}, не встиг відповісти` : 'Не подав ставку'}</div>
-                </div>
-              </div>`;
-            }
-            const verdict = judgement[p.id];
-            const safeBid = (typeof sub.bid === 'number' && !isNaN(sub.bid)) ? sub.bid : 0;
-            return `<div class="card" style="margin-bottom:12px; ${verdict === 'correct' ? 'border-color:rgba(74,222,128,0.4);' : verdict === 'wrong' ? 'border-color:rgba(232,74,48,0.4);' : ''}">
-              <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
-                <span style="font-size:24px;">${p.avatar}</span>
-                <div style="flex:1;"><b>${esc(p.name)}</b></div>
-                <div style="font-family:'Fraunces',serif; font-weight:700; color:var(--gold);">Ставка: ${safeBid}</div>
-              </div>
-              <div style="background:var(--soft); padding:10px 12px; border-radius:8px; font-family:'Fraunces',serif; font-size:18px; font-weight:700; margin-bottom:12px;">
-                ${esc(sub.answer)}
-              </div>
-              <div style="display:flex; gap:8px;">
-                <button class="btn ${verdict==='correct'?'btn-green':'btn-ghost'} btn-sm" style="flex:1;" data-action="judge-final" data-player="${p.id}" data-verdict="correct">
-                  ${icon('check',14)} Правильно (+${safeBid})
-                </button>
-                <button class="btn ${verdict==='wrong'?'btn-red':'btn-ghost'} btn-sm" style="flex:1;" data-action="judge-final" data-player="${p.id}" data-verdict="wrong">
-                  ${icon('x',14)} Неправильно (−${safeBid})
-                </button>
-              </div>
-            </div>`;
-          }).join('')}
-        </div>
-        <button class="btn btn-gold btn-lg btn-full" data-action="finalize-final" ${!allJudged?'disabled':''} style="margin-top:16px;">
-          ${icon('trophy',18)} ${allJudged ? 'Зафіксувати результати і перейти до фінальної таблиці' : 'Оціни всіх гравців'}
-        </button>
+      </div>`;
+    }
+    const verdict = judgement[p.id];
+    const safeBid = (typeof sub.bid === 'number' && !isNaN(sub.bid)) ? sub.bid : 0;
+    const borderClr = verdict === 'correct' ? 'rgba(74,222,128,0.5)' : verdict === 'wrong' ? 'rgba(232,74,48,0.5)' : 'var(--line)';
+    // Show base → current transition once judged
+    const scoreDisplay = verdict
+      ? `<span style="color:var(--ink-faint); font-size:14px;">${baseScore}</span> <span style="color:var(--ink-faint);">→</span> <span style="font-family:'Fraunces',serif; font-weight:900; font-size:22px; color:${curScore<0?'var(--accent)':'var(--gold)'};">${curScore}</span>`
+      : `<span style="font-family:'Fraunces',serif; font-weight:900; font-size:22px; color:${curScore<0?'var(--accent)':'var(--gold)'};">${curScore}</span>`;
+    return `<div class="card" style="margin-bottom:12px; border-color:${borderClr};">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+        <span style="font-size:24px;">${p.avatar}</span>
+        <div style="flex:1; min-width:0;"><b style="display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(p.name)}</b></div>
+        <div style="font-family:'Fraunces',serif; font-weight:700; color:var(--gold); font-size:13px;">ставка ${safeBid}</div>
       </div>
-    `;
-  }
+      <div style="background:var(--soft); padding:10px 12px; border-radius:8px; font-family:'Fraunces',serif; font-size:18px; font-weight:700; margin-bottom:10px;">
+        ${esc(sub.answer)}
+      </div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <div>${scoreDisplay}</div>
+        ${verdict ? `<span style="font-size:13px; font-weight:700; color:${verdict==='correct'?'var(--green)':'var(--accent)'};">${verdict==='correct'?'✓ правильно':'✗ неправильно'}</span>` : `<span style="font-size:13px; color:var(--ink-faint);">очікує оцінки</span>`}
+      </div>
+      ${state.isHost ? `
+        <div style="display:flex; gap:8px; margin-top:12px;">
+          <button class="btn ${verdict==='correct'?'btn-green':'btn-ghost'} btn-sm" style="flex:1;" data-action="judge-final" data-player="${p.id}" data-verdict="correct">
+            ${icon('check',14)} Правильно (+${safeBid})
+          </button>
+          <button class="btn ${verdict==='wrong'?'btn-red':'btn-ghost'} btn-sm" style="flex:1;" data-action="judge-final" data-player="${p.id}" data-verdict="wrong">
+            ${icon('x',14)} Неправильно (−${safeBid})
+          </button>
+        </div>
+      ` : ''}
+    </div>`;
+  };
 
-  // Player view (waiting)
-  const mySub = bids[state.myId];
   return `
     <div class="container slide-up" style="padding-top:24px;">
-      <div class="eyebrow">ФІНАЛ · ПЕРЕВІРКА</div>
-      <h2 style="font-family:'Fraunces',serif; font-size:32px; font-weight:700; margin-top:8px;">Ведучий перевіряє відповіді...</h2>
-      <div class="card" style="margin-top:24px;">
+      <div class="eyebrow">ФІНАЛ · ПЕРЕВІРКА ВІДПОВІДЕЙ</div>
+      <h2 style="font-family:'Fraunces',serif; font-size:32px; font-weight:700; margin-top:8px;">${esc(r.finalQ.category)}</h2>
+      <div class="card" style="margin-top:16px;">
         <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ПИТАННЯ</div>
         <div style="font-family:'Fraunces',serif; font-size:20px; font-weight:700; margin-bottom:12px;">${esc(r.finalQ.q)}</div>
+        ${r.finalQ.answerImage ? `<img src="${r.finalQ.answerImage}" style="max-height:180px; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
         <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ПРАВИЛЬНА ВІДПОВІДЬ</div>
         <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--green);">${esc(r.finalQ.a)}</div>
       </div>
-      ${mySub ? `
-        <div class="card" style="margin-top:16px;">
-          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ТВОЯ ВІДПОВІДЬ (СТАВКА: ${mySub.bid})</div>
-          <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:700;">${esc(mySub.answer)}</div>
-        </div>
-      ` : ''}
-      <div style="text-align:center; margin-top:24px;">
-        <span class="spin" style="color:var(--gold);">${icon('loader',24)}</span>
+
+      ${!state.isHost ? `<div style="text-align:center; color:var(--ink-dim); font-size:13px; margin-top:16px;">Ведучий перевіряє відповіді — дивись як змінюються бали</div>` : ''}
+
+      <div style="margin-top:20px;">
+        ${nonHost.map(renderPlayerCard).join('')}
       </div>
+
+      ${state.isHost ? `
+        <button class="btn btn-gold btn-lg btn-full" data-action="finalize-final" ${!allJudged?'disabled':''} style="margin-top:16px;">
+          ${icon('trophy',18)} ${allJudged ? 'Завершити і показати фінальну таблицю' : 'Оціни всіх гравців'}
+        </button>
+      ` : `
+        <div style="text-align:center; margin-top:16px;">
+          <span class="spin" style="color:var(--gold);">${icon('loader',20)}</span>
+        </div>
+      `}
     </div>
   `;
 }
@@ -2746,7 +2764,7 @@ async function playAgain(){
     currentCell: null, buzzedPlayer: null, attemptedBy: [],
     questionState: null, currentPicker: null, revealAnswer: false,
     roundsTotal: null, currentRound: null,
-    finalQ: null, finalBids: null, finalJudgement: null
+    finalQ: null, finalBids: null, finalJudgement: null, finalBaseScores: null
   });
 }
 
@@ -2780,12 +2798,19 @@ async function startFinalRound(){
     state.setupErr = 'Заповни категорію, питання і відповідь';
     render(true); return;
   }
+  const r = state.room;
+  // Snapshot scores before final so verdicts can be re-applied idempotently
+  const baseScores = {};
+  for (const [pid, p] of Object.entries(r.players || {})) {
+    baseScores[pid] = p.score || 0;
+  }
   await update(ref(db, `rooms/${state.code}`), {
     status: 'final_bid',
     currentRound: 'final',
     finalQ: { category: fq.category.trim(), q: fq.q.trim(), a: fq.a.trim() },
     finalBids: {},
     finalJudgement: {},
+    finalBaseScores: baseScores,
     finalPhaseDeadline: null,
   });
   state.subScreen = null;
@@ -2850,33 +2875,33 @@ async function goFinalReveal(){
 
 async function judgeFinalPlayer(playerId, verdict){
   if (!state.isHost) return;
-  await update(ref(db, `rooms/${state.code}/finalJudgement`), { [playerId]: verdict });
+  const r = state.room;
+  if (!r) return;
+  const sub = r.finalBids?.[playerId];
+  // Base score = score before final (fallback to current if missing)
+  const base = (r.finalBaseScores && r.finalBaseScores[playerId] != null)
+    ? r.finalBaseScores[playerId]
+    : (r.players?.[playerId]?.score || 0);
+  const rawBid = sub?.bid;
+  const bidNum = (typeof rawBid === 'number' && !isNaN(rawBid)) ? rawBid : parseInt(rawBid, 10);
+  const safeBid = Number.isFinite(bidNum) ? bidNum : 0;
+  let newScore = base;
+  if (verdict === 'correct') newScore = base + safeBid;
+  else if (verdict === 'wrong') newScore = base - safeBid;
+  // Multi-path update: set verdict AND recompute score from base (idempotent)
+  await update(ref(db, `rooms/${state.code}`), {
+    [`finalJudgement/${playerId}`]: verdict,
+    [`players/${playerId}/score`]: newScore,
+  });
 }
 
 async function finalizeFinal(){
   if (!state.isHost) return;
   const r = state.room;
   if (!r) return;
-  const players = { ...r.players };
-  const bids = r.finalBids || {};
-  const judgement = r.finalJudgement || {};
-  // Apply verdicts to scores (if any)
-  for (const [pid, sub] of Object.entries(bids)) {
-    if (!sub || !sub.answerSubmitted) continue;
-    const verdict = judgement[pid];
-    // Robustly coerce bid to a number — guard against undefined / NaN / string
-    const rawBid = sub.bid;
-    const bidNum = (typeof rawBid === 'number' && !isNaN(rawBid)) ? rawBid : parseInt(rawBid, 10);
-    const safeBid = (Number.isFinite(bidNum) ? bidNum : 0);
-    const curScore = players[pid]?.score || 0;
-    if (verdict === 'correct') {
-      players[pid] = { ...players[pid], score: curScore + safeBid };
-    } else if (verdict === 'wrong') {
-      players[pid] = { ...players[pid], score: curScore - safeBid };
-    }
-  }
+  // Scores already applied live via judgeFinalPlayer. Just move to results.
   try {
-    await update(ref(db, `rooms/${state.code}`), { players, status: 'results' });
+    await update(ref(db, `rooms/${state.code}`), { status: 'results' });
   } catch (e) {
     console.error('[finalizeFinal] failed:', e);
     alert('Помилка завершення: ' + (e.message || e));
