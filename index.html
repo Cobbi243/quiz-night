@@ -134,7 +134,16 @@ html, body {
 .code-value:hover { color: var(--accent); }
 
 .players-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
-.player-card { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; background: var(--soft); }
+.player-card { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; background: var(--soft); position: relative; }
+.kick-btn {
+  margin-left: auto; flex-shrink: 0;
+  background: transparent; border: 1px solid var(--line);
+  color: var(--ink-faint); cursor: pointer;
+  width: 28px; height: 28px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.kick-btn:hover { background: rgba(232,74,48,0.15); border-color: var(--accent); color: var(--accent); }
 .player-card.me { background: rgba(232, 74, 48, 0.15); border: 1px solid rgba(232, 74, 48, 0.4); }
 .player-avatar { font-size: 24px; }
 .player-name { font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 4px; min-width: 0; }
@@ -589,6 +598,6 @@ html, body {
     <div style="margin-top:16px; color:var(--ink-dim);">Завантаження...</div>
   </div>
 </div>
-<script type="module" src="app.js?v=202606082248"></script>
+<script type="module" src="app.js?v=202606141738"></script>
 </body>
 </html>

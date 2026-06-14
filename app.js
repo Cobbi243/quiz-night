@@ -36,8 +36,14 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.10';
+const APP_VERSION = '1.11';
 const CHANGELOG = [
+  { v: '1.11', date: '14.06.2026', changes: [
+    'Ведучий може видаляти гравців з гри (у лоббі або через картку гравця)',
+    'Новий режим базера: автовідлік 3-10 сек перед відкриттям, видно всім',
+    'Виправлено: таймер після неправильної відповіді продовжується, а не скидається',
+    'Виправлено: базер тепер надійніше спрацьовує (фікс рідкісного зависання)',
+  ]},
   { v: '1.10', date: '09.06.2026', changes: [
     'Доданий чат для всіх гравців — кнопка-бульбашка внизу справа',
     'Видно непрочитані повідомлення, працює протягом усієї гри',
@@ -187,7 +193,8 @@ let state = {
   setupCurrentRound: 1,
   setupBuzzSeconds: 30,    // host-configured: time to buzz in
   setupAnswerSeconds: 15,  // host-configured: time to answer
-  setupManualBuzz: false,  // host opens buzzer manually vs auto
+  setupBuzzMode: 'instant',  // 'instant' | 'manual' | 'countdown'
+  setupCountdownSeconds: 5,  // for countdown mode
   setupFinalQ: { category:'', q:'', a:'' },
   finalBidLocal: 0,
   finalAnswerLocal: '',
@@ -726,7 +733,8 @@ function computeHash(){
     setupCurrentRound: state.setupCurrentRound,
     setupBuzzSeconds: state.setupBuzzSeconds,
     setupAnswerSeconds: state.setupAnswerSeconds,
-    setupManualBuzz: state.setupManualBuzz,
+    setupBuzzMode: state.setupBuzzMode,
+    setupCountdownSeconds: state.setupCountdownSeconds,
     setupFinalQ: state.setupFinalQ,
     editingScorePlayerId: state.editingScorePlayerId,
     showFormatHelp: state.showFormatHelp,
@@ -939,6 +947,9 @@ function viewLobby(){
                 <span class="name-text">${esc(p.name)}</span>
                 ${p.id === r.hostId ? `<span style="color:var(--gold); flex-shrink:0;">${icon('crown',12)}</span>` : ''}
               </div>
+              ${state.isHost && p.id !== r.hostId && p.id !== state.myId ? `
+                <button class="kick-btn" data-action="kick-player" data-player="${p.id}" title="Видалити гравця">${icon('x',14)}</button>
+              ` : ''}
             </div>
           `).join('')}
         </div>
@@ -975,10 +986,15 @@ function viewModeSelect(){
         <div style="font-size:13px; color:var(--ink-dim); margin-top:16px; margin-bottom:8px;">⏱ ЧАС НА ВІДПОВІДЬ (після натискання)</div>
         <div class="timer-chip-row">${renderChips(answerOpts, state.setupAnswerSeconds, 'set-answer-sec')}</div>
         <div style="font-size:13px; color:var(--ink-dim); margin-top:16px; margin-bottom:8px;">🔔 КОЛИ ВІДКРИВАЄТЬСЯ БАЗЕР</div>
-        <div class="timer-chip-row">
-          <button class="timer-chip ${!state.setupManualBuzz ? 'active' : ''}" data-action="set-manual-buzz" data-manual="0" style="flex:1;">Одразу при виборі питання</button>
-          <button class="timer-chip ${state.setupManualBuzz ? 'active' : ''}" data-action="set-manual-buzz" data-manual="1" style="flex:1;">Ведучий відкриває вручну</button>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <button class="timer-chip ${state.setupBuzzMode === 'instant' ? 'active' : ''}" data-action="set-buzz-mode" data-mode="instant" style="text-align:left;">⚡ Одразу при виборі питання</button>
+          <button class="timer-chip ${state.setupBuzzMode === 'manual' ? 'active' : ''}" data-action="set-buzz-mode" data-mode="manual" style="text-align:left;">✋ Ведучий відкриває вручну</button>
+          <button class="timer-chip ${state.setupBuzzMode === 'countdown' ? 'active' : ''}" data-action="set-buzz-mode" data-mode="countdown" style="text-align:left;">⏳ Автовідлік ${state.setupCountdownSeconds} сек, потім базер</button>
         </div>
+        ${state.setupBuzzMode === 'countdown' ? `
+          <div style="font-size:13px; color:var(--ink-dim); margin-top:12px; margin-bottom:8px;">Скільки секунд відліку перед базером:</div>
+          <div class="timer-chip-row">${[3,5,7,10].map(v => `<button class="timer-chip ${state.setupCountdownSeconds===v?'active':''}" data-action="set-countdown-sec" data-sec="${v}">${v}с</button>`).join('')}</div>
+        ` : ''}
       </div>
 
       <p style="color:var(--ink-dim); margin-bottom:12px; font-size:13px;">Тепер обери кількість раундів — це почне гру:</p>
@@ -1402,6 +1418,15 @@ function viewQuestion(){
           return '';
         })()}
 
+        ${r.questionState === 'countdown' && r.countdownDeadline ? (() => {
+          const sec = Math.max(0, Math.ceil((r.countdownDeadline - Date.now()) / 1000));
+          return `<div style="text-align:center; padding:24px 0;">
+            <div style="font-size:13px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:8px;">Базер відкриється через</div>
+            <div id="countdown-num" style="font-family:'Fraunces',serif; font-weight:900; font-size:72px; color:var(--gold); line-height:1;">${sec}</div>
+            <div style="margin-top:8px; font-size:13px; color:var(--ink-dim);">${state.isHost ? 'Читай питання вголос!' : 'Приготуйся натискати!'}</div>
+          </div>`;
+        })() : ''}
+
         ${r.questionState === 'reading' ? (state.isHost ? `
           <div style="text-align:center;">
             <button class="btn btn-accent btn-lg" data-action="open-buzz">${icon('play',18)} Відкрити баззер для гравців</button>
@@ -1427,7 +1452,7 @@ function viewQuestion(){
             </div>
           ` : ''}
         ` : (r.questionState === 'buzzing' && !state.isHost ? `
-          <button class="buzz-btn" data-action="buzz" ${!canIBuzz?'disabled':''}>
+          <button class="buzz-btn" data-action="buzz" ${iAttempted?'disabled':''}>
             ${iAttempted ? 'Ти вже відповідав' : 'НАТИСНИ ЩОБ ВІДПОВІСТИ'}
           </button>
           ${!iAttempted ? `<div style="text-align:center; margin-top:8px; font-size:12px; color:var(--ink-dim);">або натисни <b>Пробіл</b> на клавіатурі</div>` : ''}
@@ -2050,8 +2075,9 @@ function viewScoreEditModal(){
           </div>
         </div>
 
-        <div class="modal-actions">
-          <button class="btn btn-ghost" data-action="close-score-edit">Закрити</button>
+        <div class="modal-actions" style="flex-direction:column; gap:8px;">
+          <button class="btn btn-ghost btn-full" data-action="kick-player" data-player="${state.editingScorePlayerId}" style="color:var(--accent); border-color:rgba(232,74,48,0.3);">${icon('x',16)} Видалити гравця з гри</button>
+          <button class="btn btn-ghost btn-full" data-action="close-score-edit">Закрити</button>
         </div>
       </div>
     </div>
@@ -2193,8 +2219,11 @@ async function handleAction(e){
     case 'set-answer-sec':
       state.setupAnswerSeconds = parseInt(el.dataset.sec, 10);
       render(true); break;
-    case 'set-manual-buzz':
-      state.setupManualBuzz = el.dataset.manual === '1';
+    case 'set-buzz-mode':
+      state.setupBuzzMode = el.dataset.mode;
+      render(true); break;
+    case 'set-countdown-sec':
+      state.setupCountdownSeconds = parseInt(el.dataset.sec, 10);
       render(true); break;
     case 'go-question-setup': state.subScreen = 'questionSetup'; state.setupSource = null; state.setupErr=''; render(true); break;
     case 'leave-question-setup': state.subScreen = state.setupCurrentRound === 1 ? 'modeSelect' : null; render(true); break;
@@ -2269,6 +2298,10 @@ async function handleAction(e){
     case 'score-set-exact':
       e.stopPropagation();
       await applyScoreExact();
+      break;
+    case 'kick-player':
+      e.stopPropagation();
+      await kickPlayer(el.dataset.player);
       break;
     case 'show-format-help':
       state.showFormatHelp = true;
@@ -2425,7 +2458,8 @@ async function doJoin(){
   const existing = Object.values(players).find(p => p.id === state.myId);
   if (!existing) {
     players[state.myId] = { id: state.myId, name, avatar: state.joinAvatar, score: 0 };
-    await update(ref(db, `rooms/${c}`), { players });
+    // Clear any stale "kicked" flag so re-joining works
+    await update(ref(db, `rooms/${c}`), { players, [`kicked/${state.myId}`]: null });
   }
   state.code = c; state.isHost = (r.hostId === state.myId);
   lsSet(LS_CODE, c);
@@ -2464,6 +2498,22 @@ function attachRoomListener(code){
       // Room deleted/expired
       leave();
       return;
+    }
+    // Detect being kicked: host removed me from players (or marked kicked)
+    if (!state.isHost && state.myId) {
+      const kicked = (data.kicked && data.kicked[state.myId]);
+      const removed = data.players && !data.players[state.myId];
+      // Only treat as kick if we were previously in the room
+      if ((kicked || removed) && state.room && state.room.players && state.room.players[state.myId]) {
+        if (state.unsubscribeRoom) { state.unsubscribeRoom(); state.unsubscribeRoom = null; }
+        lsDel(LS_CODE);
+        state.room = null; state.code = ''; state.isHost = false;
+        state.screen = 'home'; state.subScreen = null;
+        state.err = 'Ведучий видалив тебе з гри.';
+        state.lastRenderHash = '';
+        render(true);
+        return;
+      }
     }
     state.room = data;
     // Sync screen with status (only for the standard board/question/results flow;
@@ -2568,7 +2618,8 @@ async function startGame(pack){
     patch.finalJudgement = null;
     patch.buzzSecondsConfig = state.setupBuzzSeconds || BUZZ_SECONDS;
     patch.answerSecondsConfig = state.setupAnswerSeconds || ANSWER_SECONDS;
-    patch.manualBuzzConfig = !!state.setupManualBuzz;
+    patch.buzzModeConfig = state.setupBuzzMode || 'instant';
+    patch.countdownSecondsConfig = state.setupCountdownSeconds || 5;
   }
   await update(ref(db, `rooms/${state.code}`), patch);
   state.subScreen = null;
@@ -2609,26 +2660,47 @@ async function pickCell(ci, qi){
   if (!state.isHost) return; // only host picks
   if (r.usedCells && r.usedCells[`${ci}-${qi}`]) return;
   const now = Date.now();
-  // If host controls buzzer timing, open question in "reading" state (buzzer closed).
-  // Otherwise buzzer opens immediately with the timer running.
-  const manualBuzz = !!r.manualBuzzConfig;
+  const mode = r.buzzModeConfig || (r.manualBuzzConfig ? 'manual' : 'instant');
   const patch = {
     currentCell: {ci, qi},
     buzzedPlayer: null,
     attemptedBy: [],
     buzzPhaseRemainingMs: null,
     answerPhaseDeadline: null,
+    countdownDeadline: null,
     revealAnswer: false,
     status: 'question'
   };
-  if (manualBuzz) {
-    patch.questionState = 'reading'; // host will press "open buzzer"
+  if (mode === 'manual') {
+    // Host presses "open buzzer" when ready
+    patch.questionState = 'reading';
+    patch.buzzPhaseDeadline = null;
+  } else if (mode === 'countdown') {
+    // Show a countdown to all players, buzzer opens automatically after it
+    const cd = r.countdownSecondsConfig || 5;
+    patch.questionState = 'countdown';
+    patch.countdownDeadline = now + cd * 1000;
     patch.buzzPhaseDeadline = null;
   } else {
+    // instant
     patch.questionState = 'buzzing';
     patch.buzzPhaseDeadline = now + buzzSec(r) * 1000;
   }
   await update(ref(db, `rooms/${state.code}`), patch);
+}
+
+// Called by host when countdown finishes — opens the buzzer
+async function openBuzzAfterCountdown(){
+  const fresh = await getRoom(state.code);
+  if (!fresh) return;
+  if (fresh.questionState !== 'countdown') return;
+  if (fresh.countdownDeadline && Date.now() < fresh.countdownDeadline) return;
+  const now = Date.now();
+  await update(ref(db, `rooms/${state.code}`), {
+    questionState: 'buzzing',
+    buzzPhaseDeadline: now + buzzSec(fresh) * 1000,
+    countdownDeadline: null,
+  });
 }
 
 async function openBuzz(){
@@ -2643,16 +2715,16 @@ async function openBuzz(){
 
 async function buzz(){
   if (state.isHost) return;
-  const r = state.room;
-  if (!r) return;
-  if (r.buzzedPlayer) return;
-  if ((r.attemptedBy||[]).includes(state.myId)) return;
-  if (r.questionState !== 'buzzing') return;
-  // Anti-race: fetch fresh
+  if (!state.myId) return; // auth not ready
+  if (!state.code) return;
+  // Always work from fresh DB state to avoid stale local issues
   const fresh = await getRoom(state.code);
-  if (!fresh || fresh.buzzedPlayer || (fresh.attemptedBy||[]).includes(state.myId)) return;
+  if (!fresh) return;
+  if (fresh.status !== 'question') return;
   if (fresh.questionState !== 'buzzing') return;
-  if (fresh.buzzPhaseDeadline && Date.now() > fresh.buzzPhaseDeadline) return;
+  if (fresh.buzzedPlayer) return; // someone already buzzed
+  if ((fresh.attemptedBy||[]).includes(state.myId)) return; // already tried this question
+  if (fresh.buzzPhaseDeadline && Date.now() > fresh.buzzPhaseDeadline) return; // time's up
   const now = Date.now();
   const remaining = fresh.buzzPhaseDeadline ? Math.max(0, fresh.buzzPhaseDeadline - now) : buzzSec(fresh) * 1000;
   await update(ref(db, `rooms/${state.code}`), {
@@ -2665,7 +2737,8 @@ async function buzz(){
 
 async function judge(correctStr){
   if (!state.isHost) return;
-  const r = state.room;
+  // Read fresh state so buzzPhaseRemainingMs / attemptedBy are accurate
+  const r = await getRoom(state.code);
   if (!r || !r.buzzedPlayer || !r.currentCell) return;
   const {ci, qi} = r.currentCell;
   const q = r.pack.categories[ci].questions[qi];
@@ -2699,7 +2772,7 @@ async function judge(correctStr){
       patch.answerPhaseDeadline = null;
     } else {
       patch.questionState = 'buzzing';
-      const remaining = r.buzzPhaseRemainingMs || (buzzSec(r) * 1000);
+      const remaining = (typeof r.buzzPhaseRemainingMs === "number" && r.buzzPhaseRemainingMs > 0) ? r.buzzPhaseRemainingMs : (buzzSec(r) * 1000);
       patch.buzzPhaseDeadline = Date.now() + remaining;
       patch.buzzPhaseRemainingMs = null;
       patch.answerPhaseDeadline = null;
@@ -2719,7 +2792,7 @@ async function judge(correctStr){
       patch.answerPhaseDeadline = null;
     } else {
       patch.questionState = 'buzzing';
-      const remaining = r.buzzPhaseRemainingMs || (buzzSec(r) * 1000);
+      const remaining = (typeof r.buzzPhaseRemainingMs === "number" && r.buzzPhaseRemainingMs > 0) ? r.buzzPhaseRemainingMs : (buzzSec(r) * 1000);
       patch.buzzPhaseDeadline = Date.now() + remaining;
       patch.buzzPhaseRemainingMs = null;
       patch.answerPhaseDeadline = null;
@@ -3052,6 +3125,26 @@ async function applyScoreExact(){
   render(true);
 }
 
+async function kickPlayer(pid){
+  if (!state.isHost || !pid) return;
+  if (pid === state.myId) return; // can't kick self
+  const r = state.room;
+  const p = r?.players?.[pid];
+  const pname = p?.name || 'гравця';
+  if (!confirm(`Видалити ${pname} з гри?`)) return;
+  // Remove player + mark them kicked so their client can react
+  await update(ref(db, `rooms/${state.code}`), {
+    [`players/${pid}`]: null,
+    [`kicked/${pid}`]: true,
+  });
+  // Close score modal if open on this player
+  if (state.editingScorePlayerId === pid) {
+    state.editingScorePlayerId = null;
+    state.scoreEditInputValue = '';
+  }
+  render(true);
+}
+
 async function leave(){
   if (state.unsubscribeRoom) { state.unsubscribeRoom(); state.unsubscribeRoom = null; }
   // Remove self from room
@@ -3182,6 +3275,13 @@ function updateTimerOnly(){
   const r = state.room;
   if (!r) return;
   const now = Date.now();
+  // Countdown phase: update the big number
+  if (r.status === 'question' && r.questionState === 'countdown' && r.countdownDeadline) {
+    const cdSec = Math.max(0, Math.ceil((r.countdownDeadline - now) / 1000));
+    const cdEl = document.getElementById('countdown-num');
+    if (cdEl) cdEl.textContent = cdSec;
+    return;
+  }
   let sec, total;
   if (r.status === 'question' && r.questionState === 'buzzing' && r.buzzPhaseDeadline) {
     sec = Math.max(0, Math.ceil((r.buzzPhaseDeadline - now) / 1000));
@@ -3207,7 +3307,13 @@ setInterval(() => {
   if (!r) return;
   const now = Date.now();
   if (r.status === 'question') {
-    if (r.questionState === 'buzzing' && r.buzzPhaseDeadline) {
+    if (r.questionState === 'countdown' && r.countdownDeadline) {
+      if (now >= r.countdownDeadline) {
+        if (state.isHost) openBuzzAfterCountdown();
+      } else {
+        updateTimerOnly();
+      }
+    } else if (r.questionState === 'buzzing' && r.buzzPhaseDeadline) {
       if (now >= r.buzzPhaseDeadline) {
         if (state.isHost) timeoutBuzzPhase();
       } else {
