@@ -36,8 +36,12 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.12';
+const APP_VERSION = '1.13';
 const CHANGELOG = [
+  { v: '1.13', date: '15.06.2026', changes: [
+    'Виправлено: кнопка «пропустити питання» доступна одразу, ще до того як хтось натиснув базер',
+    'Виправлено: таймер більше не зникає під час гри',
+  ]},
   { v: '1.12', date: '15.06.2026', changes: [
     'Міні-іконка 🖼 на клітинках де є картинка (видно всім)',
   ]},
@@ -1403,19 +1407,24 @@ function viewQuestion(){
 
       <div style="margin-top:24px;">
         ${(() => {
-          // Compute timer seconds left
+          // Compute timer seconds left. Be resilient: if a deadline is
+          // momentarily missing (between state transitions), still show the bar.
           const now = Date.now();
-          if (r.questionState === 'buzzing' && r.buzzPhaseDeadline) {
-            const sec = Math.max(0, Math.ceil((r.buzzPhaseDeadline - now) / 1000));
-            const pct = Math.min(100, (sec / buzzSec(r)) * 100);
+          if (r.questionState === 'buzzing') {
+            const total = buzzSec(r);
+            const deadline = r.buzzPhaseDeadline || (now + total * 1000);
+            const sec = Math.max(0, Math.ceil((deadline - now) / 1000));
+            const pct = Math.min(100, (sec / total) * 100);
             return `<div class="timer-bar" id="timer-bar">
               <div class="timer-bar-label">⏱ Натиснути баззер: <b id="timer-sec">${sec}</b> сек</div>
               <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--accent);"></div></div>
             </div>`;
           }
-          if (r.questionState === 'answering' && r.answerPhaseDeadline) {
-            const sec = Math.max(0, Math.ceil((r.answerPhaseDeadline - now) / 1000));
-            const pct = Math.min(100, (sec / answerSec(r)) * 100);
+          if (r.questionState === 'answering') {
+            const total = answerSec(r);
+            const deadline = r.answerPhaseDeadline || (now + total * 1000);
+            const sec = Math.max(0, Math.ceil((deadline - now) / 1000));
+            const pct = Math.min(100, (sec / total) * 100);
             return `<div class="timer-bar" id="timer-bar">
               <div class="timer-bar-label">⏱ Відповідь: <b id="timer-sec">${sec}</b> сек</div>
               <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--gold);"></div></div>
@@ -1485,9 +1494,9 @@ function viewQuestion(){
           </div>
         ` : ''}
 
-        ${!r.revealAnswer && state.isHost && !buzzed && (allAttempted || attempted.length > 0) ? `
+        ${!r.revealAnswer && state.isHost && !buzzed && (r.questionState === 'buzzing' || r.questionState === 'reading' || r.questionState === 'countdown') ? `
           <div style="text-align:center; margin-top:12px;">
-            <button class="btn btn-ghost btn-sm" data-action="reveal-answer">${icon('eye',14)} Показати відповідь і закрити</button>
+            <button class="btn btn-ghost btn-sm" data-action="reveal-answer">${icon('eye',14)} ${attempted.length > 0 ? 'Показати відповідь і закрити' : 'Пропустити (ніхто не відповів)'}</button>
           </div>
         ` : ''}
       </div>
@@ -3289,12 +3298,14 @@ function updateTimerOnly(){
     return;
   }
   let sec, total;
-  if (r.status === 'question' && r.questionState === 'buzzing' && r.buzzPhaseDeadline) {
-    sec = Math.max(0, Math.ceil((r.buzzPhaseDeadline - now) / 1000));
+  if (r.status === 'question' && r.questionState === 'buzzing') {
     total = buzzSec(r);
-  } else if (r.status === 'question' && r.questionState === 'answering' && r.answerPhaseDeadline) {
-    sec = Math.max(0, Math.ceil((r.answerPhaseDeadline - now) / 1000));
+    const deadline = r.buzzPhaseDeadline || (now + total * 1000);
+    sec = Math.max(0, Math.ceil((deadline - now) / 1000));
+  } else if (r.status === 'question' && r.questionState === 'answering') {
     total = answerSec(r);
+    const deadline = r.answerPhaseDeadline || (now + total * 1000);
+    sec = Math.max(0, Math.ceil((deadline - now) / 1000));
   } else if (r.status === 'final_answer' && r.finalPhaseDeadline) {
     sec = Math.max(0, Math.ceil((r.finalPhaseDeadline - now) / 1000));
     total = FINAL_SECONDS;
@@ -3313,27 +3324,27 @@ setInterval(() => {
   if (!r) return;
   const now = Date.now();
   if (r.status === 'question') {
-    if (r.questionState === 'countdown' && r.countdownDeadline) {
-      if (now >= r.countdownDeadline) {
+    if (r.questionState === 'countdown') {
+      if (r.countdownDeadline && now >= r.countdownDeadline) {
         if (state.isHost) openBuzzAfterCountdown();
       } else {
         updateTimerOnly();
       }
-    } else if (r.questionState === 'buzzing' && r.buzzPhaseDeadline) {
-      if (now >= r.buzzPhaseDeadline) {
+    } else if (r.questionState === 'buzzing') {
+      if (r.buzzPhaseDeadline && now >= r.buzzPhaseDeadline) {
         if (state.isHost) timeoutBuzzPhase();
       } else {
         updateTimerOnly();
       }
-    } else if (r.questionState === 'answering' && r.answerPhaseDeadline) {
-      if (now >= r.answerPhaseDeadline) {
+    } else if (r.questionState === 'answering') {
+      if (r.answerPhaseDeadline && now >= r.answerPhaseDeadline) {
         if (state.isHost) timeoutAnswerPhase();
       } else {
         updateTimerOnly();
       }
     }
-  } else if (r.status === 'final_answer' && r.finalPhaseDeadline) {
-    if (now >= r.finalPhaseDeadline) {
+  } else if (r.status === 'final_answer') {
+    if (r.finalPhaseDeadline && now >= r.finalPhaseDeadline) {
       if (state.isHost) timeoutFinalPhase();
     } else {
       updateTimerOnly();
