@@ -36,8 +36,12 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.13';
+const APP_VERSION = '1.14';
 const CHANGELOG = [
+  { v: '1.14', date: '15.06.2026', changes: [
+    'Фінальні відповіді тепер розкриваються по черзі — ведучий судить кожного перед усіма',
+    'Драматичніше: відповіді відкриваються від меншої ставки до більшої',
+  ]},
   { v: '1.13', date: '15.06.2026', changes: [
     'Виправлено: кнопка «пропустити питання» доступна одразу, ще до того як хтось натиснув базер',
     'Виправлено: таймер більше не зникає під час гри',
@@ -757,6 +761,7 @@ function computeHash(){
       packLoaded: !!(r.pack && r.pack.categories),
       currentRound: r.currentRound, roundsTotal: r.roundsTotal,
       finalQ: r.finalQ, finalBids: r.finalBids, finalJudgement: r.finalJudgement,
+      finalRevealIndex: r.finalRevealIndex, finalBaseScores: r.finalBaseScores,
     } : null,
   });
 }
@@ -1829,83 +1834,158 @@ function viewFinalReveal(){
   const judgement = r.finalJudgement || {};
   const base = r.finalBaseScores || {};
 
-  const allJudged = nonHost.every(p => judgement[p.id] === 'correct' || judgement[p.id] === 'wrong' || !bids[p.id] || !bids[p.id].answerSubmitted);
+  // Only players who actually submitted an answer participate in the reveal sequence.
+  // Order: smallest bid first → biggest bid last (classic Jeopardy drama).
+  const participants = nonHost
+    .filter(p => bids[p.id] && bids[p.id].answerSubmitted)
+    .sort((a, b) => {
+      const ba = (typeof bids[a.id].bid === 'number') ? bids[a.id].bid : 0;
+      const bb = (typeof bids[b.id].bid === 'number') ? bids[b.id].bid : 0;
+      return ba - bb;
+    });
+  // Players who didn't answer — shown separately at the end (no judging needed)
+  const nonParticipants = nonHost.filter(p => !bids[p.id] || !bids[p.id].answerSubmitted);
 
-  // Shared card renderer for one player (host gets judge buttons, players see verdict only)
-  const renderPlayerCard = (p) => {
+  const revealIdx = r.finalRevealIndex || 0;
+  const total = participants.length;
+  const currentPlayer = revealIdx < total ? participants[revealIdx] : null;
+  const allRevealed = revealIdx >= total;
+  const currentJudged = currentPlayer && (judgement[currentPlayer.id] === 'correct' || judgement[currentPlayer.id] === 'wrong');
+
+  // Card renderer for an already-revealed (judged) player — compact
+  const revealedCard = (p) => {
     const sub = bids[p.id];
     const baseScore = base[p.id] != null ? base[p.id] : (p.score || 0);
     const curScore = p.score || 0;
-    if (!sub || !sub.answerSubmitted) {
-      return `<div class="card" style="margin-bottom:12px; opacity:0.55;">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <span style="font-size:24px;">${p.avatar}</span>
-          <div style="flex:1; min-width:0;"><b style="display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(p.name)}</b></div>
-          <div style="font-size:13px; color:var(--ink-dim);">${sub && sub.bidSubmitted ? `Ставка ${sub.bid}, без відповіді` : 'Не грав фінал'}</div>
-          <div style="font-family:'Fraunces',serif; font-weight:900; font-size:20px; color:${curScore<0?'var(--accent)':'var(--gold)'};">${curScore}</div>
-        </div>
-      </div>`;
-    }
     const verdict = judgement[p.id];
     const safeBid = (typeof sub.bid === 'number' && !isNaN(sub.bid)) ? sub.bid : 0;
     const borderClr = verdict === 'correct' ? 'rgba(74,222,128,0.5)' : verdict === 'wrong' ? 'rgba(232,74,48,0.5)' : 'var(--line)';
-    // Show base → current transition once judged
-    const scoreDisplay = verdict
-      ? `<span style="color:var(--ink-faint); font-size:14px;">${baseScore}</span> <span style="color:var(--ink-faint);">→</span> <span style="font-family:'Fraunces',serif; font-weight:900; font-size:22px; color:${curScore<0?'var(--accent)':'var(--gold)'};">${curScore}</span>`
-      : `<span style="font-family:'Fraunces',serif; font-weight:900; font-size:22px; color:${curScore<0?'var(--accent)':'var(--gold)'};">${curScore}</span>`;
-    return `<div class="card" style="margin-bottom:12px; border-color:${borderClr};">
-      <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
-        <span style="font-size:24px;">${p.avatar}</span>
-        <div style="flex:1; min-width:0;"><b style="display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(p.name)}</b></div>
-        <div style="font-family:'Fraunces',serif; font-weight:700; color:var(--gold); font-size:13px;">ставка ${safeBid}</div>
+    return `<div class="card" style="margin-bottom:10px; border-color:${borderClr}; opacity:0.9;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-size:20px;">${p.avatar}</span>
+        <div style="flex:1; min-width:0;">
+          <b style="display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(p.name)}</b>
+          <span style="font-size:13px; color:var(--ink-dim);">«${esc(sub.answer)}» · ставка ${safeBid}</span>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:12px; font-weight:700; color:${verdict==='correct'?'var(--green)':'var(--accent)'};">${verdict==='correct'?'✓':'✗'}</div>
+          <div style="font-family:'Fraunces',serif; font-weight:900; font-size:18px; color:${curScore<0?'var(--accent)':'var(--gold)'};">
+            <span style="color:var(--ink-faint); font-size:12px;">${baseScore}→</span>${curScore}
+          </div>
+        </div>
       </div>
-      <div style="background:var(--soft); padding:10px 12px; border-radius:8px; font-family:'Fraunces',serif; font-size:18px; font-weight:700; margin-bottom:10px;">
-        ${esc(sub.answer)}
+    </div>`;
+  };
+
+  // Big spotlight card for the current player being judged
+  const spotlightCard = (p) => {
+    const sub = bids[p.id];
+    const baseScore = base[p.id] != null ? base[p.id] : (p.score || 0);
+    const curScore = p.score || 0;
+    const verdict = judgement[p.id];
+    const safeBid = (typeof sub.bid === 'number' && !isNaN(sub.bid)) ? sub.bid : 0;
+    const borderClr = verdict === 'correct' ? 'var(--green)' : verdict === 'wrong' ? 'var(--accent)' : 'var(--gold)';
+    return `<div class="card spotlight-card" style="border:2px solid ${borderClr}; padding:24px;">
+      <div style="text-align:center; margin-bottom:16px;">
+        <div style="font-size:48px; margin-bottom:4px;">${p.avatar}</div>
+        <div style="font-family:'Fraunces',serif; font-weight:900; font-size:24px;">${esc(p.name)}</div>
+        <div style="font-size:13px; color:var(--gold); font-weight:700; margin-top:4px;">поставив ${safeBid} балів</div>
       </div>
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-        <div>${scoreDisplay}</div>
-        ${verdict ? `<span style="font-size:13px; font-weight:700; color:${verdict==='correct'?'var(--green)':'var(--accent)'};">${verdict==='correct'?'✓ правильно':'✗ неправильно'}</span>` : `<span style="font-size:13px; color:var(--ink-faint);">очікує оцінки</span>`}
+      <div style="background:var(--soft); padding:16px; border-radius:12px; text-align:center; margin-bottom:16px;">
+        <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:6px;">ВІДПОВІДЬ</div>
+        <div style="font-family:'Fraunces',serif; font-weight:700; font-size:24px;">${esc(sub.answer)}</div>
       </div>
+      ${verdict ? `
+        <div style="text-align:center; margin-bottom:8px;">
+          <span style="font-size:16px; font-weight:700; color:${verdict==='correct'?'var(--green)':'var(--accent)'};">
+            ${verdict==='correct'?'✓ ПРАВИЛЬНО':'✗ НЕПРАВИЛЬНО'}
+          </span>
+        </div>
+        <div style="text-align:center; font-family:'Fraunces',serif; font-weight:900; font-size:32px;">
+          <span style="color:var(--ink-faint); font-size:20px;">${baseScore}</span>
+          <span style="color:var(--ink-faint);"> → </span>
+          <span style="color:${curScore<0?'var(--accent)':'var(--gold)'};">${curScore}</span>
+        </div>
+      ` : `
+        <div style="text-align:center; font-size:14px; color:var(--ink-dim);">
+          Поточні бали: <b style="color:var(--ink);">${curScore}</b>
+        </div>
+      `}
       ${state.isHost ? `
-        <div style="display:flex; gap:8px; margin-top:12px;">
-          <button class="btn ${verdict==='correct'?'btn-green':'btn-ghost'} btn-sm" style="flex:1;" data-action="judge-final" data-player="${p.id}" data-verdict="correct">
-            ${icon('check',14)} Правильно (+${safeBid})
+        <div style="display:flex; gap:8px; margin-top:20px;">
+          <button class="btn ${verdict==='correct'?'btn-green':'btn-ghost'} btn-lg" style="flex:1;" data-action="judge-final" data-player="${p.id}" data-verdict="correct">
+            ${icon('check',18)} Правильно (+${safeBid})
           </button>
-          <button class="btn ${verdict==='wrong'?'btn-red':'btn-ghost'} btn-sm" style="flex:1;" data-action="judge-final" data-player="${p.id}" data-verdict="wrong">
-            ${icon('x',14)} Неправильно (−${safeBid})
+          <button class="btn ${verdict==='wrong'?'btn-red':'btn-ghost'} btn-lg" style="flex:1;" data-action="judge-final" data-player="${p.id}" data-verdict="wrong">
+            ${icon('x',18)} Неправильно (−${safeBid})
           </button>
         </div>
-      ` : ''}
+      ` : `
+        <div style="text-align:center; margin-top:16px; font-size:13px; color:var(--ink-dim);">
+          ${verdict ? 'Ведучий оцінив відповідь' : 'Ведучий оцінює відповідь...'}
+        </div>
+      `}
     </div>`;
   };
 
   return `
     <div class="container slide-up" style="padding-top:24px;">
-      <div class="eyebrow">ФІНАЛ · ПЕРЕВІРКА ВІДПОВІДЕЙ</div>
-      <h2 style="font-family:'Fraunces',serif; font-size:32px; font-weight:700; margin-top:8px;">${esc(r.finalQ.category)}</h2>
-      <div class="card" style="margin-top:16px;">
+      <div class="eyebrow">ФІНАЛ · ПЕРЕВІРКА ВІДПОВІДЕЙ ${total > 0 ? `· ${Math.min(revealIdx+1, total)}/${total}` : ''}</div>
+      <h2 style="font-family:'Fraunces',serif; font-size:28px; font-weight:700; margin-top:8px;">${esc(r.finalQ.category)}</h2>
+      <div class="card" style="margin-top:12px;">
         <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ПИТАННЯ</div>
-        <div style="font-family:'Fraunces',serif; font-size:20px; font-weight:700; margin-bottom:12px;">${esc(r.finalQ.q)}</div>
-        ${r.finalQ.answerImage ? `<img src="${r.finalQ.answerImage}" style="max-height:180px; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
+        <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:700; margin-bottom:12px;">${esc(r.finalQ.q)}</div>
+        ${r.finalQ.answerImage ? `<img src="${r.finalQ.answerImage}" style="max-height:160px; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
         <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ПРАВИЛЬНА ВІДПОВІДЬ</div>
         <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--green);">${esc(r.finalQ.a)}</div>
       </div>
 
-      ${!state.isHost ? `<div style="text-align:center; color:var(--ink-dim); font-size:13px; margin-top:16px;">Ведучий перевіряє відповіді — дивись як змінюються бали</div>` : ''}
-
-      <div style="margin-top:20px;">
-        ${nonHost.map(renderPlayerCard).join('')}
-      </div>
-
-      ${state.isHost ? `
-        <button class="btn btn-gold btn-lg btn-full" data-action="finalize-final" ${!allJudged?'disabled':''} style="margin-top:16px;">
-          ${icon('trophy',18)} ${allJudged ? 'Завершити і показати фінальну таблицю' : 'Оціни всіх гравців'}
-        </button>
-      ` : `
-        <div style="text-align:center; margin-top:16px;">
-          <span class="spin" style="color:var(--gold);">${icon('loader',20)}</span>
+      ${revealIdx > 0 ? `
+        <div style="margin-top:20px;">
+          ${participants.slice(0, Math.min(revealIdx, total)).map(revealedCard).join('')}
         </div>
-      `}
+      ` : ''}
+
+      ${currentPlayer ? `
+        <div style="margin-top:16px;">
+          ${spotlightCard(currentPlayer)}
+        </div>
+        ${state.isHost ? `
+          <button class="btn ${currentJudged?'btn-gold':'btn-ghost'} btn-lg btn-full" data-action="next-final-reveal" ${!currentJudged?'disabled':''} style="margin-top:16px;">
+            ${revealIdx + 1 < total ? `${icon('chevronRight',18)} Наступний гравець` : `${icon('chevronRight',18)} До результатів нижче`}
+          </button>
+        ` : ''}
+      ` : ''}
+
+      ${allRevealed ? `
+        ${nonParticipants.length > 0 ? `
+          <div style="margin-top:20px;">
+            <div style="font-size:12px; color:var(--ink-dim); margin-bottom:8px;">Не відповідали у фіналі:</div>
+            ${nonParticipants.map(p => `
+              <div class="card" style="margin-bottom:8px; opacity:0.6;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="font-size:20px;">${p.avatar}</span>
+                  <div style="flex:1;">${esc(p.name)}</div>
+                  <div style="font-family:'Fraunces',serif; font-weight:900; color:${(p.score||0)<0?'var(--accent)':'var(--gold)'};">${p.score||0}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+        ${state.isHost ? `
+          <button class="btn btn-gold btn-lg btn-full" data-action="finalize-final" style="margin-top:16px;">
+            ${icon('trophy',18)} Показати фінальну таблицю
+          </button>
+        ` : `
+          <div style="text-align:center; margin-top:16px; color:var(--ink-dim); font-size:13px;">
+            <span class="spin" style="color:var(--gold);">${icon('loader',18)}</span> Очікуємо фінальну таблицю...
+          </div>
+        `}
+      ` : ''}
+
+      ${!state.isHost && !currentPlayer && !allRevealed ? `
+        <div style="text-align:center; margin-top:20px; color:var(--ink-dim); font-size:13px;">Ведучий розпочинає перевірку...</div>
+      ` : ''}
     </div>
   `;
 }
@@ -2290,6 +2370,7 @@ async function handleAction(e){
     case 'submit-final-answer': await submitFinalAnswer(); break;
     case 'start-final-answer-phase': await startFinalAnswerPhase(); break;
     case 'go-final-reveal': await goFinalReveal(); break;
+    case 'next-final-reveal': await nextFinalReveal(); break;
     case 'judge-final': await judgeFinalPlayer(el.dataset.player, el.dataset.verdict); break;
     case 'finalize-final': await finalizeFinal(); break;
     // Score edit
@@ -3004,6 +3085,7 @@ async function timeoutFinalPhase(){
   await update(ref(db, `rooms/${state.code}`), {
     status: 'final_reveal',
     finalPhaseDeadline: null,
+    finalRevealIndex: 0,
   });
 }
 
@@ -3047,7 +3129,16 @@ async function startFinalAnswerPhase(){
 
 async function goFinalReveal(){
   if (!state.isHost) return;
-  await update(ref(db, `rooms/${state.code}`), { status: 'final_reveal' });
+  await update(ref(db, `rooms/${state.code}`), { status: 'final_reveal', finalRevealIndex: 0 });
+}
+
+// Advance to reveal the next player's answer
+async function nextFinalReveal(){
+  if (!state.isHost) return;
+  const r = state.room;
+  if (!r) return;
+  const cur = r.finalRevealIndex || 0;
+  await update(ref(db, `rooms/${state.code}`), { finalRevealIndex: cur + 1 });
 }
 
 // ============== CHAT ==============
