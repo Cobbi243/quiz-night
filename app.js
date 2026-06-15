@@ -36,8 +36,11 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.11';
+const APP_VERSION = '1.12';
 const CHANGELOG = [
+  { v: '1.12', date: '15.06.2026', changes: [
+    'Міні-іконка 🖼 на клітинках де є картинка (видно всім)',
+  ]},
   { v: '1.11', date: '14.06.2026', changes: [
     'Ведучий може видаляти гравців з гри (у лоббі або через картку гравця)',
     'Новий режим базера: автовідлік 3-10 сек перед відкриттям, видно всім',
@@ -1322,8 +1325,11 @@ function viewBoard(){
           ${VALUES.map((_v, vi) =>
             cats.map((c, ci) => {
               const used = r.usedCells && r.usedCells[`${ci}-${vi}`];
-              const cellValue = c.questions[vi]?.value || VALUES[vi];
-              return `<button class="board-cell ${used?'used':''}" ${(used||!canPick)?'disabled':''} data-action="pick-cell" data-ci="${ci}" data-qi="${vi}">${used ? '' : cellValue}</button>`;
+              const q = c.questions[vi];
+              const cellValue = q?.value || VALUES[vi];
+              // Show a small photo icon on cells whose question or answer has an image
+              const hasImg = q && (q.image || q.answerImage);
+              return `<button class="board-cell ${used?'used':''}" ${(used||!canPick)?'disabled':''} data-action="pick-cell" data-ci="${ci}" data-qi="${vi}">${used ? '' : cellValue}${hasImg && !used ? `<span class="cell-img-icon" title="Питання/відповідь з картинкою">${icon('image',12)}</span>` : ''}</button>`;
             }).join('')
           ).join('')}
         </div>
