@@ -36,8 +36,12 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.20';
+const APP_VERSION = '1.21';
 const CHANGELOG = [
+  { v: '1.21', date: '16.06.2026', changes: [
+    'Виправлено базер що не працював у гравців зі збитим годинником на пристрої',
+    'Усі таймери тепер синхронізовані з сервером, а не з годинником пристрою',
+  ]},
   { v: '1.20', date: '16.06.2026', changes: [
     'Виправлено залипання базера: якщо ведучий проґавив таймаут, гра тепер сама йде далі',
     'Натискання на самій межі таймера тепер зараховується',
@@ -148,6 +152,8 @@ const CHANGELOG = [
 
 // Read room's configured timers, falling back to defaults
 function buzzSec(r){ return (r && r.buzzSecondsConfig) || BUZZ_SECONDS; }
+// Current time corrected to the Firebase server clock (handles skewed device clocks)
+function serverNow(){ return Date.now() + (state.serverTimeOffset || 0); }
 function answerSec(r){ return (r && r.answerSecondsConfig) || ANSWER_SECONDS; }
 
 // Sample pack (used when "Готовий пак" selected)
@@ -206,6 +212,7 @@ let state = {
   room: null,
   myId: null,
   isHost: false,
+  serverTimeOffset: 0,  // ms difference between server clock and this device
   authReady: false,
   err: '',
   loading: false,
@@ -1483,7 +1490,7 @@ function viewQuestion(){
         ${(() => {
           // Compute timer seconds left. Be resilient: if a deadline is
           // momentarily missing (between state transitions), still show the bar.
-          const now = Date.now();
+          const now = serverNow();
           if (r.questionState === 'buzzing') {
             const total = buzzSec(r);
             const deadline = r.buzzPhaseDeadline || (now + total * 1000);
@@ -1508,7 +1515,7 @@ function viewQuestion(){
         })()}
 
         ${r.questionState === 'countdown' && r.countdownDeadline ? (() => {
-          const sec = Math.max(0, Math.ceil((r.countdownDeadline - Date.now()) / 1000));
+          const sec = Math.max(0, Math.ceil((r.countdownDeadline - serverNow()) / 1000));
           return `<div style="text-align:center; padding:24px 0;">
             <div style="font-size:13px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:8px;">Базер відкриється через</div>
             <div id="countdown-num" style="font-family:'Fraunces',serif; font-weight:900; font-size:72px; color:var(--gold); line-height:1;">${sec}</div>
@@ -1835,7 +1842,7 @@ function viewFinalAnswer(){
         <div class="eyebrow">ФІНАЛ · ФАЗА 2 · ВІДПОВІДЬ</div>
         <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-top:8px; margin-bottom:8px;">${esc(r.finalQ.category)}</h2>
         ${r.finalPhaseDeadline ? (() => {
-          const sec = Math.max(0, Math.ceil((r.finalPhaseDeadline - Date.now()) / 1000));
+          const sec = Math.max(0, Math.ceil((r.finalPhaseDeadline - serverNow()) / 1000));
           const pct = Math.min(100, (sec / FINAL_SECONDS) * 100);
           return `<div class="timer-bar" id="timer-bar" style="margin-top:16px;">
             <div class="timer-bar-label">⏱ До завершення: <b id="timer-sec">${sec}</b> сек</div>
@@ -1897,7 +1904,7 @@ function viewFinalAnswer(){
       <div class="eyebrow">ФІНАЛ · ФАЗА 2 · ВІДПОВІДЬ</div>
       <h2 style="font-family:'Fraunces',serif; font-size:32px; font-weight:900; margin-top:8px;">${esc(r.finalQ.category)}</h2>
       ${r.finalPhaseDeadline ? (() => {
-        const sec = Math.max(0, Math.ceil((r.finalPhaseDeadline - Date.now()) / 1000));
+        const sec = Math.max(0, Math.ceil((r.finalPhaseDeadline - serverNow()) / 1000));
         const pct = Math.min(100, (sec / FINAL_SECONDS) * 100);
         return `<div class="timer-bar" id="timer-bar" style="margin-top:12px; margin-bottom:8px;">
           <div class="timer-bar-label">⏱ Залишилось: <b id="timer-sec">${sec}</b> сек</div>
@@ -2954,7 +2961,7 @@ async function pickCell(ci, qi){
   if (!r) return;
   if (!state.isHost) return; // only host picks
   if (r.usedCells && r.usedCells[`${ci}-${qi}`]) return;
-  const now = Date.now();
+  const now = serverNow();
   const mode = r.buzzModeConfig || (r.manualBuzzConfig ? 'manual' : 'instant');
   const patch = {
     currentCell: {ci, qi},
@@ -2989,8 +2996,8 @@ async function openBuzzAfterCountdown(){
   const fresh = await getRoom(state.code);
   if (!fresh) return;
   if (fresh.questionState !== 'countdown') return;
-  if (fresh.countdownDeadline && Date.now() < fresh.countdownDeadline) return;
-  const now = Date.now();
+  if (fresh.countdownDeadline && serverNow() < fresh.countdownDeadline) return;
+  const now = serverNow();
   await update(ref(db, `rooms/${state.code}`), {
     questionState: 'buzzing',
     buzzPhaseDeadline: now + buzzSec(fresh) * 1000,
@@ -3001,7 +3008,7 @@ async function openBuzzAfterCountdown(){
 async function openBuzz(){
   if (!state.isHost) return;
   const r = state.room;
-  const now = Date.now();
+  const now = serverNow();
   await update(ref(db, `rooms/${state.code}`), {
     questionState: 'buzzing',
     buzzPhaseDeadline: now + buzzSec(r) * 1000,
@@ -3030,13 +3037,12 @@ async function resyncRoom(){
 }
 
 async function buzz(){
-  const why = (reason) => { try { console.log('[buzz blocked]', reason, {myId: state.myId, qs: state.room?.questionState, attempted: state.room?.attemptedBy, buzzed: state.room?.buzzedPlayer}); } catch(_){} };
-  if (state.isHost) return why('isHost');
-  if (!state.myId) return why('no myId (auth not ready)');
-  if (!state.code) return why('no code');
+  if (state.isHost) return;
+  if (!state.myId) return;
+  if (!state.code) return;
   const r = state.room;
-  if (!r || r.status !== 'question') return why('not in question');
-  if ((r.attemptedBy||[]).includes(state.myId)) return why('already in attemptedBy');
+  if (!r || r.status !== 'question') return;
+  if ((r.attemptedBy||[]).includes(state.myId)) return;
 
   // Anti-spam (hardcore): every press counts toward the cooldown — even presses
   // made BEFORE the buzzer opens. Pressing early = you're locked out for 1s, so
@@ -3048,7 +3054,7 @@ async function buzz(){
       state.buzzCooldownUntil = state.lastBuzzAttempt + 1000;
       showBuzzCooldownHint();
       state.lastBuzzAttempt = now0;
-      return why('cooldown active');
+      return;
     }
     state.lastBuzzAttempt = now0;
     state.buzzCooldownUntil = now0 + 1000;
@@ -3057,19 +3063,27 @@ async function buzz(){
   // Buzzer must be open to actually register the buzz. If it's not open yet
   // (reading/countdown) the press above already triggered the cooldown, but
   // nothing is registered — the player simply wasted their press.
-  if (r.questionState !== 'buzzing') return why('buzzer not open (' + r.questionState + ')');
-  if (r.buzzedPlayer) return why('someone already buzzed: ' + r.buzzedPlayer);
+  if (r.questionState !== 'buzzing') return;
+  if (r.buzzedPlayer) return;
 
   // Work from fresh DB state to avoid stale local issues
   const fresh = await getRoom(state.code);
-  if (!fresh) return why('no fresh room');
-  if (fresh.status !== 'question') return why('fresh: not question');
-  if (fresh.questionState !== 'buzzing') return why('fresh: not buzzing');
-  if (fresh.buzzedPlayer) return why('fresh: already buzzed');
-  if ((fresh.attemptedBy||[]).includes(state.myId)) return why('fresh: in attemptedBy');
-  if (fresh.buzzPhaseDeadline && Date.now() > fresh.buzzPhaseDeadline + 1500) return why('fresh: time up'); // small grace so an edge press still counts
-  const now = Date.now();
-  const remaining = fresh.buzzPhaseDeadline ? Math.max(0, fresh.buzzPhaseDeadline - now) : buzzSec(fresh) * 1000;
+  if (!fresh) return;
+  if (fresh.status !== 'question') return;
+  if (fresh.questionState !== 'buzzing') return;
+  if (fresh.buzzedPlayer) return;
+  if ((fresh.attemptedBy||[]).includes(state.myId)) return;
+  // NOTE: we deliberately do NOT reject based on Date.now() vs buzzPhaseDeadline.
+  // A player's local clock can be skewed minutes ahead, which would make every
+  // buzz look "expired" and silently block them. The host closes the question on
+  // timeout using its own clock; the player only needs the buzzer to be open.
+  const now = serverNow();
+  let remaining = buzzSec(fresh) * 1000;
+  if (fresh.buzzPhaseDeadline) {
+    const calc = fresh.buzzPhaseDeadline - now;
+    // Clamp to a sane range in case of any residual skew
+    remaining = Math.max(1000, Math.min(buzzSec(fresh) * 1000, calc > 0 ? calc : buzzSec(fresh) * 1000));
+  }
   await update(ref(db, `rooms/${state.code}`), {
     buzzedPlayer: state.myId,
     questionState: 'answering',
@@ -3124,7 +3138,7 @@ async function judge(correctStr){
     } else {
       patch.questionState = 'buzzing';
       const remaining = (typeof r.buzzPhaseRemainingMs === "number" && r.buzzPhaseRemainingMs > 0) ? r.buzzPhaseRemainingMs : (buzzSec(r) * 1000);
-      patch.buzzPhaseDeadline = Date.now() + remaining;
+      patch.buzzPhaseDeadline = serverNow() + remaining;
       patch.buzzPhaseRemainingMs = null;
       patch.answerPhaseDeadline = null;
     }
@@ -3144,7 +3158,7 @@ async function judge(correctStr){
     } else {
       patch.questionState = 'buzzing';
       const remaining = (typeof r.buzzPhaseRemainingMs === "number" && r.buzzPhaseRemainingMs > 0) ? r.buzzPhaseRemainingMs : (buzzSec(r) * 1000);
-      patch.buzzPhaseDeadline = Date.now() + remaining;
+      patch.buzzPhaseDeadline = serverNow() + remaining;
       patch.buzzPhaseRemainingMs = null;
       patch.answerPhaseDeadline = null;
     }
@@ -3160,7 +3174,7 @@ async function timeoutBuzzPhase(){
   if (!fresh) return;
   // Only fire if we're still in buzzing and deadline has passed
   if (fresh.questionState !== 'buzzing') return;
-  if (!fresh.buzzPhaseDeadline || Date.now() < fresh.buzzPhaseDeadline) return;
+  if (!fresh.buzzPhaseDeadline || serverNow() < fresh.buzzPhaseDeadline) return;
   if (!fresh.currentCell) return;
   const {ci, qi} = fresh.currentCell;
   const used = { ...(fresh.usedCells||{}), [`${ci}-${qi}`]: true };
@@ -3173,14 +3187,18 @@ async function timeoutBuzzPhase(){
     answerPhaseDeadline: null,
     buzzPhaseRemainingMs: null,
   };
-  await update(ref(db, `rooms/${state.code}`), patch);
+  try {
+    await update(ref(db, `rooms/${state.code}`), patch);
+  } catch (e) {
+    console.error('[timeoutBuzzPhase] write failed (likely permissions):', e);
+  }
 }
 
 async function timeoutAnswerPhase(){
   const fresh = await getRoom(state.code);
   if (!fresh) return;
   if (fresh.questionState !== 'answering') return;
-  if (!fresh.answerPhaseDeadline || Date.now() < fresh.answerPhaseDeadline) return;
+  if (!fresh.answerPhaseDeadline || serverNow() < fresh.answerPhaseDeadline) return;
   if (!fresh.buzzedPlayer || !fresh.currentCell) return;
   // Treat as wrong: deduct value, return to buzzing or close if all attempted
   const {ci, qi} = fresh.currentCell;
@@ -3210,7 +3228,7 @@ async function timeoutAnswerPhase(){
       attemptedBy: newAttempted,
       buzzedPlayer: null,
       questionState: 'buzzing',
-      buzzPhaseDeadline: Date.now() + remaining,
+      buzzPhaseDeadline: serverNow() + remaining,
       buzzPhaseRemainingMs: null,
       answerPhaseDeadline: null,
     });
@@ -3343,7 +3361,7 @@ async function timeoutFinalPhase(){
   const fresh = await getRoom(state.code);
   if (!fresh) return;
   if (fresh.status !== 'final_answer') return;
-  if (!fresh.finalPhaseDeadline || Date.now() < fresh.finalPhaseDeadline) return;
+  if (!fresh.finalPhaseDeadline || serverNow() < fresh.finalPhaseDeadline) return;
   await update(ref(db, `rooms/${state.code}`), {
     status: 'final_reveal',
     finalPhaseDeadline: null,
@@ -3385,7 +3403,7 @@ async function startFinalAnswerPhase(){
   if (!state.isHost) return;
   await update(ref(db, `rooms/${state.code}`), {
     status: 'final_answer',
-    finalPhaseDeadline: Date.now() + FINAL_SECONDS * 1000,
+    finalPhaseDeadline: serverNow() + FINAL_SECONDS * 1000,
   });
 }
 
@@ -3550,6 +3568,14 @@ async function leave(){
 async function init(){
   render(true);
   if (!FIREBASE_CONFIGURED) return;
+  // Track clock skew between this device and Firebase servers, so timers work
+  // even if the player's local clock is wrong (a common cause of "buzzer dead").
+  try {
+    onValue(ref(db, '.info/serverTimeOffset'), (snap) => {
+      const off = snap.val();
+      if (typeof off === 'number') state.serverTimeOffset = off;
+    });
+  } catch (_) {}
   // Anonymous auth
   onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -3649,7 +3675,7 @@ function updateFinalSubmitButton(){
 function updateTimerOnly(){
   const r = state.room;
   if (!r) return;
-  const now = Date.now();
+  const now = serverNow();
   // Countdown phase: update the big number
   if (r.status === 'question' && r.questionState === 'countdown' && r.countdownDeadline) {
     const cdSec = Math.max(0, Math.ceil((r.countdownDeadline - now) / 1000));
@@ -3682,7 +3708,7 @@ function updateTimerOnly(){
 setInterval(() => {
   const r = state.room;
   if (!r) return;
-  const now = Date.now();
+  const now = serverNow();
   // Failsafe grace: if the host doesn't advance a phase within 1.5s of the
   // deadline (host backgrounded, lagging, disconnected), any client triggers it.
   const GRACE = 1500;
