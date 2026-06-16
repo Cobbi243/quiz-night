@@ -36,8 +36,14 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.14';
+const APP_VERSION = '1.15';
 const CHANGELOG = [
+  { v: '1.15', date: '16.06.2026', changes: [
+    'Усі паки (раунди + фінал) завантажуються наперед на одному екрані',
+    'Старт гри окремою кнопкою — більше не стартує одразу після вибору пака',
+    'Між раундами гра йде без зупинок: наступний пак уже готовий',
+    'Можна вибирати паки і налаштування в будь-якому порядку',
+  ]},
   { v: '1.14', date: '15.06.2026', changes: [
     'Фінальні відповіді тепер розкриваються по черзі — ведучий судить кожного перед усіма',
     'Драматичніше: відповіді відкриваються від меншої ставки до більшої',
@@ -202,6 +208,8 @@ let state = {
   // Rounds & final
   setupRoundsTotal: null,
   setupCurrentRound: 1,
+  setupRoundPacks: {},   // {1: pack, 2: pack, 3: pack} — collected before game starts
+  editingRound: null,    // which round's pack the host is currently picking
   setupBuzzSeconds: 30,    // host-configured: time to buzz in
   setupAnswerSeconds: 15,  // host-configured: time to answer
   setupBuzzMode: 'instant',  // 'instant' | 'manual' | 'countdown'
@@ -742,6 +750,8 @@ function computeHash(){
     savedPacks: state.savedPacks.length,
     setupRoundsTotal: state.setupRoundsTotal,
     setupCurrentRound: state.setupCurrentRound,
+    editingRound: state.editingRound,
+    roundPacksReady: Object.keys(state.setupRoundPacks || {}).join(','),
     setupBuzzSeconds: state.setupBuzzSeconds,
     setupAnswerSeconds: state.setupAnswerSeconds,
     setupBuzzMode: state.setupBuzzMode,
@@ -986,56 +996,79 @@ function viewModeSelect(){
   const renderChips = (opts, cur, action) => opts.map(v =>
     `<button class="timer-chip ${cur === v ? 'active' : ''}" data-action="${action}" data-sec="${v}">${v}с</button>`
   ).join('');
+  const rt = state.setupRoundsTotal;
+  const packs = state.setupRoundPacks || {};
+  const fq = state.setupFinalQ || {};
+  const finalReady = !!(fq.category?.trim() && fq.q?.trim() && fq.a?.trim());
+  // All round packs collected?
+  let allRoundsReady = false;
+  if (rt) {
+    allRoundsReady = true;
+    for (let i = 1; i <= rt; i++) if (!packs[i]) allRoundsReady = false;
+  }
+
   return `
     <button class="back-btn" data-action="leave-mode-select">${icon('arrowLeft',16)} Назад в лоббі</button>
     <div class="container slide-up">
       <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-bottom:8px;">Налаштування гри</h2>
-      <p style="color:var(--ink-dim); margin-bottom:32px;">Кожен раунд — нова дошка з новим паком. Кожен наступний раунд дає більше очків.</p>
+      <p style="color:var(--ink-dim); margin-bottom:24px;">Обери кількість раундів, заваж паки і налаштуй таймери. Старт — коли все готово.</p>
 
-      <div class="card" style="margin-bottom:16px;">
-        <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px;">⏱ ЧАС НА НАТИСКАННЯ БАЗЕРА</div>
-        <div class="timer-chip-row">${renderChips(buzzOpts, state.setupBuzzSeconds, 'set-buzz-sec')}</div>
-        <div style="font-size:13px; color:var(--ink-dim); margin-top:16px; margin-bottom:8px;">⏱ ЧАС НА ВІДПОВІДЬ (після натискання)</div>
-        <div class="timer-chip-row">${renderChips(answerOpts, state.setupAnswerSeconds, 'set-answer-sec')}</div>
-        <div style="font-size:13px; color:var(--ink-dim); margin-top:16px; margin-bottom:8px;">🔔 КОЛИ ВІДКРИВАЄТЬСЯ БАЗЕР</div>
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          <button class="timer-chip ${state.setupBuzzMode === 'instant' ? 'active' : ''}" data-action="set-buzz-mode" data-mode="instant" style="text-align:left;">⚡ Одразу при виборі питання</button>
-          <button class="timer-chip ${state.setupBuzzMode === 'manual' ? 'active' : ''}" data-action="set-buzz-mode" data-mode="manual" style="text-align:left;">✋ Ведучий відкриває вручну</button>
-          <button class="timer-chip ${state.setupBuzzMode === 'countdown' ? 'active' : ''}" data-action="set-buzz-mode" data-mode="countdown" style="text-align:left;">⏳ Автовідлік ${state.setupCountdownSeconds} сек, потім базер</button>
+      <div style="font-size:13px; color:var(--ink-dim); margin-bottom:10px;">КІЛЬКІСТЬ РАУНДІВ</div>
+      <div class="timer-chip-row" style="margin-bottom:20px;">
+        ${[1,2,3].map(n => `<button class="timer-chip ${rt===n?'active':''}" data-action="pick-rounds" data-rounds="${n}" style="flex:1; padding:12px;">${n} ${n===1?'раунд':'раунди'}</button>`).join('')}
+      </div>
+
+      ${rt ? `
+        <div style="font-size:13px; color:var(--ink-dim); margin-bottom:10px;">📦 ПАКИ ПИТАНЬ (по 6 категорій × 5)</div>
+        <div style="display:grid; gap:10px; margin-bottom:20px;">
+          ${Array.from({length: rt}, (_, i) => i+1).map(n => {
+            const pk = packs[n];
+            return `<button class="source-card" data-action="pick-round-pack" data-round="${n}">
+              <div class="source-icon ${pk?'gold':'red'}">${pk ? icon('check',22) : icon('package',22)}</div>
+              <div style="flex:1; min-width:0;">
+                <div class="source-title">Раунд ${n} ${rt>1?`(бали ×${n})`:''}</div>
+                <div class="source-sub">${pk ? `✓ ${esc(pk.name || 'пак готовий')} — ${pk.categories.length} категорій` : 'Натисни щоб завантажити пак'}</div>
+              </div>
+              ${pk ? `<span style="color:var(--ink-faint);">${icon('chevronRight',16)}</span>` : ''}
+            </button>`;
+          }).join('')}
+
+          <button class="source-card" data-action="pick-final-setup">
+            <div class="source-icon ${finalReady?'gold':'blue'}">${finalReady ? icon('check',22) : icon('crown',22)}</div>
+            <div style="flex:1; min-width:0;">
+              <div class="source-title">Фінальне питання</div>
+              <div class="source-sub">${finalReady ? `✓ ${esc(fq.category)}` : 'Одне питання зі ставками (необовʼязково)'}</div>
+            </div>
+            <span style="color:var(--ink-faint);">${icon('chevronRight',16)}</span>
+          </button>
         </div>
-        ${state.setupBuzzMode === 'countdown' ? `
-          <div style="font-size:13px; color:var(--ink-dim); margin-top:12px; margin-bottom:8px;">Скільки секунд відліку перед базером:</div>
-          <div class="timer-chip-row">${[3,5,7,10].map(v => `<button class="timer-chip ${state.setupCountdownSeconds===v?'active':''}" data-action="set-countdown-sec" data-sec="${v}">${v}с</button>`).join('')}</div>
-        ` : ''}
-      </div>
 
-      <p style="color:var(--ink-dim); margin-bottom:12px; font-size:13px;">Тепер обери кількість раундів — це почне гру:</p>
-      <div style="display:grid; gap:12px;">
-        <button class="source-card" data-action="pick-rounds" data-rounds="1">
-          <div class="source-icon gold">${icon('package',22)}</div>
-          <div>
-            <div class="source-title">1 раунд</div>
-            <div class="source-sub">30 питань · 200–1000 балів · ~30 хв</div>
+        <div class="card" style="margin-bottom:16px;">
+          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px;">⏱ ЧАС НА НАТИСКАННЯ БАЗЕРА</div>
+          <div class="timer-chip-row">${renderChips(buzzOpts, state.setupBuzzSeconds, 'set-buzz-sec')}</div>
+          <div style="font-size:13px; color:var(--ink-dim); margin-top:16px; margin-bottom:8px;">⏱ ЧАС НА ВІДПОВІДЬ (після натискання)</div>
+          <div class="timer-chip-row">${renderChips(answerOpts, state.setupAnswerSeconds, 'set-answer-sec')}</div>
+          <div style="font-size:13px; color:var(--ink-dim); margin-top:16px; margin-bottom:8px;">🔔 КОЛИ ВІДКРИВАЄТЬСЯ БАЗЕР</div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <button class="timer-chip ${state.setupBuzzMode === 'instant' ? 'active' : ''}" data-action="set-buzz-mode" data-mode="instant" style="text-align:left;">⚡ Одразу при виборі питання</button>
+            <button class="timer-chip ${state.setupBuzzMode === 'manual' ? 'active' : ''}" data-action="set-buzz-mode" data-mode="manual" style="text-align:left;">✋ Ведучий відкриває вручну</button>
+            <button class="timer-chip ${state.setupBuzzMode === 'countdown' ? 'active' : ''}" data-action="set-buzz-mode" data-mode="countdown" style="text-align:left;">⏳ Автовідлік ${state.setupCountdownSeconds} сек, потім базер</button>
           </div>
+          ${state.setupBuzzMode === 'countdown' ? `
+            <div style="font-size:13px; color:var(--ink-dim); margin-top:12px; margin-bottom:8px;">Скільки секунд відліку перед базером:</div>
+            <div class="timer-chip-row">${[3,5,7,10].map(v => `<button class="timer-chip ${state.setupCountdownSeconds===v?'active':''}" data-action="set-countdown-sec" data-sec="${v}">${v}с</button>`).join('')}</div>
+          ` : ''}
+        </div>
+
+        ${state.setupErr ? `<div class="err-text" style="margin-bottom:12px;">${esc(state.setupErr)}</div>` : ''}
+
+        <button class="btn ${allRoundsReady?'btn-accent':'btn-ghost'} btn-lg btn-full" data-action="start-all-rounds" ${!allRoundsReady?'disabled':''}>
+          ${allRoundsReady ? `${icon('play',18)} Почати гру` : `Заваж паки для всіх ${rt} раундів`}
         </button>
-        <button class="source-card" data-action="pick-rounds" data-rounds="2">
-          <div class="source-icon red">${icon('package',22)}</div>
-          <div>
-            <div class="source-title">2 раунди</div>
-            <div class="source-sub">60 питань · ×1 потім ×2 (400–2000) · ~1 год</div>
-          </div>
-        </button>
-        <button class="source-card" data-action="pick-rounds" data-rounds="3">
-          <div class="source-icon blue">${icon('crown',22)}</div>
-          <div>
-            <div class="source-title">3 раунди</div>
-            <div class="source-sub">90 питань · ×1 / ×2 / ×3 · ~1.5 год</div>
-          </div>
-        </button>
-      </div>
-      <div class="info-text" style="margin-top: 24px;">
-        💡 Після всіх раундів — <b>фінал</b>: гравці ставлять свої бали на одне питання і пишуть відповідь у чат.
-      </div>
+        ${!finalReady && allRoundsReady ? `<div class="info-text" style="margin-top:12px;">💡 Фінальне питання не задане — гра завершиться без фіналу (можна додати пізніше).</div>` : ''}
+      ` : `
+        <div class="info-text">Обери кількість раундів, щоб продовжити.</div>
+      `}
     </div>
   `;
 }
@@ -1604,7 +1637,13 @@ function viewRoundDone(){
       ` : ''}
       ${state.isHost ? `
         ${isLastRegularRound ? `
-          <button class="btn btn-gold btn-lg btn-full" data-action="go-final-setup">${icon('crown',18)} Перейти до фінального раунду</button>
+          ${(() => {
+            const fq = state.setupFinalQ || {};
+            const finalReady = !!(fq.category?.trim() && fq.q?.trim() && fq.a?.trim());
+            return finalReady
+              ? `<button class="btn btn-gold btn-lg btn-full" data-action="start-final">${icon('crown',18)} Запустити фінал</button>`
+              : `<button class="btn btn-gold btn-lg btn-full" data-action="go-final-setup">${icon('crown',18)} Створити фінальне питання</button>`;
+          })()}
           <button class="btn btn-ghost btn-lg btn-full" data-action="skip-to-results" style="margin-top:8px;">Завершити без фіналу</button>
         ` : `
           <button class="btn btn-gold btn-lg btn-full" data-action="go-next-round" data-round="${nextRound}">${icon('chevronRight',18)} Перейти до раунду ${nextRound} (бали ×${nextRound})</button>
@@ -1622,8 +1661,11 @@ function viewRoundDone(){
 
 function viewFinalSetup(){
   const fq = state.setupFinalQ || {category:'', q:'', a:''};
+  const r = state.room;
+  // "Setup phase" = game hasn't started yet (still in lobby collecting packs)
+  const isSetupPhase = !r || r.status === 'lobby';
   return `
-    <button class="back-btn" data-action="leave-final-setup">${icon('arrowLeft',16)} Назад</button>
+    <button class="back-btn" data-action="${isSetupPhase ? 'leave-final-to-modeselect' : 'leave-final-setup'}">${icon('arrowLeft',16)} Назад</button>
     <div class="container slide-up">
       <div class="eyebrow">ФІНАЛЬНИЙ РАУНД</div>
       <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-bottom:8px; margin-top:8px;">Питання для фіналу</h2>
@@ -1634,10 +1676,17 @@ function viewFinalSetup(){
         <input class="input" id="final-a" placeholder="Правильна відповідь..." value="${esc(fq.a)}" autocomplete="off" style="color:var(--green);">
       </div>
       ${state.setupErr ? `<div class="err-text">${esc(state.setupErr)}</div>` : ''}
-      <button class="btn btn-gold btn-lg btn-full" data-action="start-final" style="margin-top:24px;">
-        ${icon('crown',18)} Запустити фінал
-      </button>
-      <div class="info-text">Кожен гравець побачить категорію (без питання) і поставить бали (від 0 до своїх балів). Потім побачить питання і напише відповідь.</div>
+      ${isSetupPhase ? `
+        <button class="btn btn-gold btn-lg btn-full" data-action="save-final-setup" style="margin-top:24px;">
+          ${icon('check',18)} Зберегти фінальне питання
+        </button>
+        <div class="info-text">Збережеться разом з паками. Гра запустить фінал автоматично після останнього раунду.</div>
+      ` : `
+        <button class="btn btn-gold btn-lg btn-full" data-action="start-final" style="margin-top:24px;">
+          ${icon('crown',18)} Запустити фінал
+        </button>
+        <div class="info-text">Кожен гравець побачить категорію (без питання) і поставить бали. Потім побачить питання і напише відповідь.</div>
+      `}
     </div>
   `;
 }
@@ -2300,14 +2349,37 @@ async function handleAction(e){
       state.setupErr = '';
       state.setupRoundsTotal = null;
       state.setupCurrentRound = 1;
+      state.setupRoundPacks = {};
+      state.editingRound = null;
       render(true); break;
     case 'leave-mode-select': state.subScreen = null; render(true); break;
     case 'pick-rounds':
+      // Just set the number of rounds; don't start. Keep already-picked packs that still fit.
       state.setupRoundsTotal = parseInt(el.dataset.rounds, 10);
-      state.setupCurrentRound = 1;
+      // Drop packs for rounds beyond the new total
+      Object.keys(state.setupRoundPacks).forEach(k => {
+        if (parseInt(k,10) > state.setupRoundsTotal) delete state.setupRoundPacks[k];
+      });
+      state.setupErr = '';
+      render(true); break;
+    case 'pick-round-pack':
+      // Open the pack picker for a specific round
+      state.editingRound = parseInt(el.dataset.round, 10);
+      state.setupCurrentRound = state.editingRound;
       state.subScreen = 'questionSetup';
       state.setupSource = null;
+      state.setupFilePack = null;
+      state.setupAiPreview = null;
+      state.setupManualPack = null;
+      state.setupErr = '';
       render(true); break;
+    case 'pick-final-setup':
+      state.subScreen = 'finalSetup';
+      state.setupErr = '';
+      render(true); break;
+    case 'start-all-rounds':
+      await startAllRounds();
+      break;
     case 'set-buzz-sec':
       state.setupBuzzSeconds = parseInt(el.dataset.sec, 10);
       render(true); break;
@@ -2321,25 +2393,25 @@ async function handleAction(e){
       state.setupCountdownSeconds = parseInt(el.dataset.sec, 10);
       render(true); break;
     case 'go-question-setup': state.subScreen = 'questionSetup'; state.setupSource = null; state.setupErr=''; render(true); break;
-    case 'leave-question-setup': state.subScreen = state.setupCurrentRound === 1 ? 'modeSelect' : null; render(true); break;
+    case 'leave-question-setup': state.subScreen = 'modeSelect'; state.editingRound = null; state.setupErr=''; render(true); break;
     case 'set-source':
       state.setupSource = el.dataset.source || null;
       state.setupErr='';
       if (state.setupSource === 'manual' && !state.setupManualPack) state.setupManualPack = emptyManualPack();
       if (state.setupSource === 'saved') await refreshPacks();
       render(true); break;
-    case 'use-saved-pack': await useSavedPack(el.dataset.id); break;
+    case 'use-saved-pack': await assignPackToRound(state.savedPacks.find(p=>p.id===el.dataset.id)?.pack); break;
     case 'delete-pack': await handleDeletePack(el.dataset.id); break;
-    case 'start-preset': await startGame(SAMPLE_PACK); break;
+    case 'start-preset': await assignPackToRound(SAMPLE_PACK); break;
     case 'open-file-picker': document.getElementById('file-input')?.click(); break;
     case 'reset-file': state.setupFilePack = null; state.setupErr=''; render(true); break;
-    case 'start-file': await startGame(state.setupFilePack); break;
+    case 'start-file': await assignPackToRound(state.setupFilePack); break;
     case 'save-file-pack': await saveCurrentPack(state.setupFilePack); break;
     case 'ai-generate': await aiGenerate(); break;
     case 'ai-clear': state.setupAiPreview = null; render(true); break;
-    case 'start-ai': await startGame(state.setupAiPreview); break;
+    case 'start-ai': await assignPackToRound(state.setupAiPreview); break;
     case 'save-ai-pack': await saveCurrentPack(state.setupAiPreview); break;
-    case 'start-manual': await startGame(state.setupManualPack); break;
+    case 'start-manual': await assignPackToRound(state.setupManualPack); break;
     case 'save-manual-pack': await saveCurrentPack(state.setupManualPack); break;
     case 'add-image': await pickImageFor(el.dataset.key, 'image'); break;
     case 'clear-image': clearImageFor(el.dataset.key, 'image'); break;
@@ -2365,6 +2437,19 @@ async function handleAction(e){
       if (!state.setupFinalQ) state.setupFinalQ = {category:'', q:'', a:''};
       render(true); break;
     case 'leave-final-setup': state.subScreen = null; render(true); break;
+    case 'leave-final-to-modeselect':
+      state.subScreen = 'modeSelect'; state.setupErr=''; render(true); break;
+    case 'save-final-setup': {
+      // Read inputs (they live in state already via listeners, but ensure latest)
+      const fq = state.setupFinalQ || {};
+      if (!fq.category?.trim() || !fq.q?.trim() || !fq.a?.trim()) {
+        state.setupErr = 'Заповни категорію, питання і відповідь (або натисни Назад щоб пропустити фінал)';
+        render(true); break;
+      }
+      state.subScreen = 'modeSelect';
+      state.setupErr = '';
+      render(true); break;
+    }
     case 'start-final': await startFinalRound(); break;
     case 'submit-final-bid': await submitFinalBid(); break;
     case 'submit-final-answer': await submitFinalAnswer(); break;
@@ -2623,6 +2708,62 @@ function attachRoomListener(code){
     }
     render();
   });
+}
+
+// Validate a pack, return array of problem strings (empty = valid)
+function validatePack(pack){
+  const problems = [];
+  if (!pack || !pack.categories || pack.categories.length < CATS_PER_BOARD) {
+    problems.push(`Потрібно ${CATS_PER_BOARD} категорій, знайдено ${pack?.categories?.length || 0}`);
+    return problems;
+  }
+  pack.categories.slice(0, CATS_PER_BOARD).forEach((c, ci) => {
+    if (!c.name || !c.name.trim()) problems.push(`Категорія №${ci+1}: порожня назва`);
+    const qs = c.questions || [];
+    if (qs.length < QS_PER_CAT) problems.push(`Категорія "${c.name||ci+1}": лише ${qs.length}/5 питань`);
+    qs.forEach((q, qi) => {
+      const hasText = q.q && q.q.trim();
+      const hasImage = !!q.image;
+      const hasAnsText = q.a && q.a.trim();
+      const hasAnsImage = !!q.answerImage;
+      if (!hasText && !hasImage) problems.push(`"${c.name||ci+1}" · ${q.value || VALUES[qi]}: порожнє питання`);
+      if (!hasAnsText && !hasAnsImage) problems.push(`"${c.name||ci+1}" · ${q.value || VALUES[qi]}: порожня відповідь`);
+    });
+  });
+  return problems;
+}
+
+// Assign a chosen pack to the round slot the host is editing, then return to mode select
+async function assignPackToRound(pack){
+  const problems = validatePack(pack);
+  if (problems.length > 0) {
+    state.setupErr = 'Проблеми у паку:\n• ' + problems.slice(0, 8).join('\n• ') + (problems.length > 8 ? `\n...і ще ${problems.length-8}` : '');
+    render(true); return;
+  }
+  const roundN = state.editingRound || 1;
+  state.setupRoundPacks[roundN] = pack;
+  state.editingRound = null;
+  state.subScreen = 'modeSelect';
+  state.setupSource = null;
+  state.setupFilePack = null;
+  state.setupAiPreview = null;
+  state.setupManualPack = null;
+  state.setupErr = '';
+  render(true);
+}
+
+// Start the game once all round packs are collected
+async function startAllRounds(){
+  if (!state.isHost) return;
+  const rt = state.setupRoundsTotal || 1;
+  for (let i = 1; i <= rt; i++) {
+    if (!state.setupRoundPacks[i]) {
+      state.setupErr = `Не завантажено пак для раунду ${i}`;
+      render(true); return;
+    }
+  }
+  state.setupCurrentRound = 1;
+  await startGame(state.setupRoundPacks[1]);
 }
 
 async function startGame(pack){
@@ -3031,16 +3172,23 @@ async function goNextRound(nextRoundNum){
   if (!state.isHost) return;
   const r = state.room;
   if (!r) return;
-  // Set up to pick pack for the next round
   state.setupCurrentRound = nextRoundNum;
   state.setupRoundsTotal = r.roundsTotal || nextRoundNum;
-  state.setupSource = null;
-  state.setupErr = '';
-  state.setupFilePack = null;
-  state.setupAiPreview = null;
-  state.setupManualPack = null;
-  state.subScreen = 'questionSetup';
-  render(true);
+  // Use the pack collected during setup
+  const pack = state.setupRoundPacks?.[nextRoundNum];
+  if (!pack) {
+    // Fallback: if packs weren't pre-collected (e.g. old flow), ask to pick
+    state.editingRound = nextRoundNum;
+    state.setupSource = null;
+    state.setupErr = '';
+    state.setupFilePack = null;
+    state.setupAiPreview = null;
+    state.setupManualPack = null;
+    state.subScreen = 'questionSetup';
+    render(true);
+    return;
+  }
+  await startGame(pack);
 }
 
 async function skipToResults(){
