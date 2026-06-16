@@ -36,8 +36,12 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.16';
+const APP_VERSION = '1.17';
 const CHANGELOG = [
+  { v: '1.17', date: '16.06.2026', changes: [
+    'Новий хардкор-режим базера: 1 сек кулдаун між натисканнями (антиспам)',
+    'Кнопка трясеться якщо тиснути занадто часто в хардкорі',
+  ]},
   { v: '1.16', date: '16.06.2026', changes: [
     'Виправлено: завантажені паки більше не зникають при поверненні в лоббі',
     'Кнопка в лоббі показує прогрес: «Продовжити налаштування (2/3 паків)»',
@@ -219,9 +223,12 @@ let state = {
   setupAnswerSeconds: 15,  // host-configured: time to answer
   setupBuzzMode: 'instant',  // 'instant' | 'manual' | 'countdown'
   setupCountdownSeconds: 5,  // for countdown mode
+  setupAntiSpam: false,      // hardcore: 1s cooldown between buzz attempts
   setupFinalQ: { category:'', q:'', a:'' },
   finalBidLocal: 0,
   finalAnswerLocal: '',
+  lastBuzzAttempt: 0,      // anti-spam: timestamp of last buzz press
+  buzzCooldownUntil: 0,
   // Host can manually edit any player's score
   editingScorePlayerId: null,
   scoreEditInputValue: '',
@@ -760,6 +767,7 @@ function computeHash(){
     setupBuzzSeconds: state.setupBuzzSeconds,
     setupAnswerSeconds: state.setupAnswerSeconds,
     setupBuzzMode: state.setupBuzzMode,
+    setupAntiSpam: state.setupAntiSpam,
     setupCountdownSeconds: state.setupCountdownSeconds,
     setupFinalQ: state.setupFinalQ,
     editingScorePlayerId: state.editingScorePlayerId,
@@ -1068,6 +1076,11 @@ function viewModeSelect(){
             <div style="font-size:13px; color:var(--ink-dim); margin-top:12px; margin-bottom:8px;">Скільки секунд відліку перед базером:</div>
             <div class="timer-chip-row">${[3,5,7,10].map(v => `<button class="timer-chip ${state.setupCountdownSeconds===v?'active':''}" data-action="set-countdown-sec" data-sec="${v}">${v}с</button>`).join('')}</div>
           ` : ''}
+          <div style="font-size:13px; color:var(--ink-dim); margin-top:16px; margin-bottom:8px;">🎯 РЕЖИМ НАТИСКАННЯ БАЗЕРА</div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <button class="timer-chip ${!state.setupAntiSpam ? 'active' : ''}" data-action="set-anti-spam" data-anti="0" style="text-align:left;">😎 Звичайний — хто перший натиснув, той відповідає</button>
+            <button class="timer-chip ${state.setupAntiSpam ? 'active' : ''}" data-action="set-anti-spam" data-anti="1" style="text-align:left;">🔥 Хардкор — 1 сек кулдаун між натисканнями (антиспам)</button>
+          </div>
         </div>
 
         ${state.setupErr ? `<div class="err-text" style="margin-bottom:12px;">${esc(state.setupErr)}</div>` : ''}
@@ -1518,7 +1531,7 @@ function viewQuestion(){
           <button class="buzz-btn" data-action="buzz" ${iAttempted?'disabled':''}>
             ${iAttempted ? 'Ти вже відповідав' : 'НАТИСНИ ЩОБ ВІДПОВІСТИ'}
           </button>
-          ${!iAttempted ? `<div style="text-align:center; margin-top:8px; font-size:12px; color:var(--ink-dim);">або натисни <b>Пробіл</b> на клавіатурі</div>` : ''}
+          ${!iAttempted ? `<div style="text-align:center; margin-top:8px; font-size:12px; color:var(--ink-dim);">або натисни <b>Пробіл</b> на клавіатурі${r.antiSpamConfig ? ' · 🔥 хардкор: 1 сек між натисканнями' : ''}</div>` : ''}
         ` : '')}
 
         ${state.isHost && r.questionState === 'buzzing' && !buzzed ? `
@@ -2403,6 +2416,9 @@ async function handleAction(e){
     case 'set-buzz-mode':
       state.setupBuzzMode = el.dataset.mode;
       render(true); break;
+    case 'set-anti-spam':
+      state.setupAntiSpam = el.dataset.anti === '1';
+      render(true); break;
     case 'set-countdown-sec':
       state.setupCountdownSeconds = parseInt(el.dataset.sec, 10);
       render(true); break;
@@ -2710,6 +2726,11 @@ function attachRoomListener(code){
         return;
       }
     }
+    // Reset anti-spam cooldown when a new cell/question begins
+    const prevCell = state.room?.currentCell;
+    const newCell = data.currentCell;
+    const cellChanged = JSON.stringify(prevCell) !== JSON.stringify(newCell);
+    if (cellChanged) { state.lastBuzzAttempt = 0; state.buzzCooldownUntil = 0; }
     state.room = data;
     // Sync screen with status (only for the standard board/question/results flow;
     // round_done/final_* are rendered by status check directly)
@@ -2870,6 +2891,7 @@ async function startGame(pack){
     patch.buzzSecondsConfig = state.setupBuzzSeconds || BUZZ_SECONDS;
     patch.answerSecondsConfig = state.setupAnswerSeconds || ANSWER_SECONDS;
     patch.buzzModeConfig = state.setupBuzzMode || 'instant';
+    patch.antiSpamConfig = !!state.setupAntiSpam;
     patch.countdownSecondsConfig = state.setupCountdownSeconds || 5;
   }
   await update(ref(db, `rooms/${state.code}`), patch);
@@ -2968,6 +2990,21 @@ async function buzz(){
   if (state.isHost) return;
   if (!state.myId) return; // auth not ready
   if (!state.code) return;
+  const r = state.room;
+  // Anti-spam (hardcore) mode: enforce a 1s cooldown between attempts.
+  // Every press (even a failed one) resets the cooldown — punishes mashing.
+  if (r && r.antiSpamConfig) {
+    const now0 = Date.now();
+    if (state.lastBuzzAttempt && (now0 - state.lastBuzzAttempt) < 1000) {
+      // Still cooling down — show a brief visual hint and ignore the press
+      state.buzzCooldownUntil = state.lastBuzzAttempt + 1000;
+      showBuzzCooldownHint();
+      state.lastBuzzAttempt = now0; // mashing keeps extending the lockout
+      return;
+    }
+    state.lastBuzzAttempt = now0;
+    state.buzzCooldownUntil = now0 + 1000;
+  }
   // Always work from fresh DB state to avoid stale local issues
   const fresh = await getRoom(state.code);
   if (!fresh) return;
@@ -2984,6 +3021,14 @@ async function buzz(){
     buzzPhaseRemainingMs: remaining,
     answerPhaseDeadline: now + answerSec(fresh) * 1000,
   });
+}
+
+// Briefly flash the buzz button red to signal cooldown
+function showBuzzCooldownHint(){
+  const btn = document.querySelector('.buzz-btn');
+  if (!btn) return;
+  btn.classList.add('cooldown');
+  setTimeout(() => { const b = document.querySelector('.buzz-btn'); if (b) b.classList.remove('cooldown'); }, 600);
 }
 
 async function judge(correctStr){

@@ -279,6 +279,14 @@ html, body {
 }
 .buzz-btn:active:not(:disabled) { transform: scale(0.97); }
 .buzz-btn:disabled { background: var(--soft); cursor: not-allowed; box-shadow: none; opacity: 0.5; }
+.buzz-btn.cooldown { animation: buzzShake 0.4s ease; background: var(--soft); }
+@keyframes buzzShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(5px); }
+}
 
 .buzzed-banner { background: var(--gold); color: var(--bg); border-radius: 16px; padding: 20px 24px; text-align: center; }
 .buzzed-banner-label { font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
@@ -604,6 +612,6 @@ html, body {
     <div style="margin-top:16px; color:var(--ink-dim);">Завантаження...</div>
   </div>
 </div>
-<script type="module" src="app.js?v=202606160845"></script>
+<script type="module" src="app.js?v=202606160857"></script>
 </body>
 </html>
