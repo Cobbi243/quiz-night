@@ -29,15 +29,19 @@ const AVATARS = ['🦊','🐼','🐯','🦁','🐸','🐙','🦉','🐲','🦄',
 const VALUES = [200, 400, 600, 800, 1000];
 const CATS_PER_BOARD = 6;
 const QS_PER_CAT = 5;
-const MAX_IMG_SIZE = 700;     // max width/height px (compromise: visible but compact)
-const MAX_IMG_BYTES = 90_000; // ~90KB target after compression (was 150KB)
+const MAX_IMG_SIZE = 1200;     // max width/height px (larger for better quality)
+const MAX_IMG_BYTES = 220_000; // ~220KB target after compression (higher to keep larger images sharp)
 const BUZZ_SECONDS = 30;       // total time to buzz in (default)
 const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.18';
+const APP_VERSION = '1.19';
 const CHANGELOG = [
+  { v: '1.19', date: '16.06.2026', changes: [
+    'Картинки більші і чіткіші (до 1200px), показуються майже на весь екран',
+    'Щоб старі паки стали якіснішими — перезаваж їх',
+  ]},
   { v: '1.18', date: '16.06.2026', changes: [
     'Кнопка «Базер завис? Оновити» — якщо у гравця завис базер, можна перепідключитись',
     'Додано діагностику базера (видно причину в консолі браузера)',
@@ -1459,13 +1463,13 @@ function viewQuestion(){
         ${r.revealAnswer ? `
           <div class="q-answer-reveal">
             <div class="q-answer-reveal-label">ПРАВИЛЬНА ВІДПОВІДЬ</div>
-            ${q.answerImage ? `<img src="${q.answerImage}" class="q-image" style="max-height:240px; margin-bottom:8px;" alt="">` : ''}
+            ${q.answerImage ? `<img src="${q.answerImage}" class="q-image" style="max-height:50vh; margin-bottom:8px;" alt="">` : ''}
             ${q.a && q.a.trim() ? `<div class="q-answer-reveal-text">${esc(q.a)}</div>` : ''}
           </div>
         ` : (state.isHost ? `
           <div style="margin-top:24px; padding:12px; background: rgba(74,222,128,0.08); border:1px dashed rgba(74,222,128,0.3); border-radius:12px; text-align:center;">
             <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">ВІДПОВІДЬ (ТІЛЬКИ ТИ БАЧИШ)</div>
-            ${q.answerImage ? `<img src="${q.answerImage}" style="max-height:160px; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
+            ${q.answerImage ? `<img src="${q.answerImage}" style="max-height:40vh; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
             ${q.a && q.a.trim() ? `<div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--green);">${esc(q.a)}</div>` : ''}
           </div>
         ` : '')}
@@ -2020,7 +2024,7 @@ function viewFinalReveal(){
       <div class="card" style="margin-top:12px;">
         <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ПИТАННЯ</div>
         <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:700; margin-bottom:12px;">${esc(r.finalQ.q)}</div>
-        ${r.finalQ.answerImage ? `<img src="${r.finalQ.answerImage}" style="max-height:160px; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
+        ${r.finalQ.answerImage ? `<img src="${r.finalQ.answerImage}" style="max-height:45vh; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
         <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ПРАВИЛЬНА ВІДПОВІДЬ</div>
         <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--green);">${esc(r.finalQ.a)}</div>
       </div>
