@@ -36,8 +36,13 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.15';
+const APP_VERSION = '1.16';
 const CHANGELOG = [
+  { v: '1.16', date: '16.06.2026', changes: [
+    'Виправлено: завантажені паки більше не зникають при поверненні в лоббі',
+    'Кнопка в лоббі показує прогрес: «Продовжити налаштування (2/3 паків)»',
+    'Дрібні правки тексту в налаштуваннях',
+  ]},
   { v: '1.15', date: '16.06.2026', changes: [
     'Усі паки (раунди + фінал) завантажуються наперед на одному екрані',
     'Старт гри окремою кнопкою — більше не стартує одразу після вибору пака',
@@ -977,7 +982,12 @@ function viewLobby(){
         </div>
       </div>
       ${state.isHost ? `
-        <button class="btn btn-gold btn-lg btn-full" data-action="go-mode-select">${icon('play',18)} Налаштувати гру та почати</button>
+        ${(() => {
+          const rt = state.setupRoundsTotal;
+          const collected = Object.keys(state.setupRoundPacks || {}).length;
+          const inProgress = rt && collected > 0;
+          return `<button class="btn btn-gold btn-lg btn-full" data-action="go-mode-select">${icon('play',18)} ${inProgress ? `Продовжити налаштування (${collected}/${rt} паків)` : 'Налаштувати гру та почати'}</button>`;
+        })()}
       ` : `
         <div class="card" style="text-align:center; padding:40px;">
           <span class="spin" style="color:var(--gold);">${icon('loader',32)}</span>
@@ -1011,7 +1021,7 @@ function viewModeSelect(){
     <button class="back-btn" data-action="leave-mode-select">${icon('arrowLeft',16)} Назад в лоббі</button>
     <div class="container slide-up">
       <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-bottom:8px;">Налаштування гри</h2>
-      <p style="color:var(--ink-dim); margin-bottom:24px;">Обери кількість раундів, заваж паки і налаштуй таймери. Старт — коли все готово.</p>
+      <p style="color:var(--ink-dim); margin-bottom:24px;">Обери кількість раундів, завантаж паки і налаштуй таймери. Старт — коли все готово.</p>
 
       <div style="font-size:13px; color:var(--ink-dim); margin-bottom:10px;">КІЛЬКІСТЬ РАУНДІВ</div>
       <div class="timer-chip-row" style="margin-bottom:20px;">
@@ -1157,7 +1167,7 @@ function viewSetupPreset(){
       </div>
     </div>
     <button class="btn btn-gold btn-lg btn-full" data-action="start-preset" ${state.setupLoading?'disabled':''}>
-      ${state.setupLoading ? `<span class="spin">${icon('loader',18)}</span>` : 'Стартанути гру'}
+      ${state.setupLoading ? `<span class="spin">${icon('loader',18)}</span>` : 'Підтвердити пак'}
     </button>
   `;
 }
@@ -1227,7 +1237,7 @@ function viewSetupFile(){
       <div style="display:flex; gap:12px;">
         <button class="btn btn-ghost btn-lg" style="flex:1;" data-action="reset-file">Інший файл</button>
         <button class="btn btn-gold btn-lg" style="flex:1;" data-action="start-file" ${state.setupLoading?'disabled':''}>
-          ${state.setupLoading ? `<span class="spin">${icon('loader',18)}</span>` : 'Стартанути'}
+          ${state.setupLoading ? `<span class="spin">${icon('loader',18)}</span>` : 'Підтвердити'}
         </button>
       </div>
     `}
@@ -1272,7 +1282,7 @@ function viewSetupAi(){
       </div>
       <div style="display:flex; gap:12px;">
         <button class="btn btn-ghost btn-lg" style="flex:1;" data-action="ai-clear">Згенерувати інше</button>
-        <button class="btn btn-gold btn-lg" style="flex:1;" data-action="start-ai">Стартанути</button>
+        <button class="btn btn-gold btn-lg" style="flex:1;" data-action="start-ai">Підтвердити</button>
       </div>
     `}
   `;
@@ -1325,7 +1335,7 @@ function viewSetupManual(){
       <button class="btn btn-ghost btn-sm" data-action="save-manual-pack" style="white-space:nowrap;">${icon('save',14)} Зберегти в БД</button>
     </div>
     <button class="btn btn-gold btn-lg btn-full" data-action="start-manual" ${state.setupLoading?'disabled':''}>
-      ${state.setupLoading ? `<span class="spin">${icon('loader',18)}</span>` : 'Стартанути гру'}
+      ${state.setupLoading ? `<span class="spin">${icon('loader',18)}</span>` : 'Підтвердити пак'}
     </button>
     <input type="file" id="img-input" accept="image/*" style="display:none;">
   `;
@@ -2347,10 +2357,14 @@ async function handleAction(e){
       state.subScreen = 'modeSelect';
       state.setupSource = null;
       state.setupErr = '';
-      state.setupRoundsTotal = null;
-      state.setupCurrentRound = 1;
-      state.setupRoundPacks = {};
-      state.editingRound = null;
+      // Preserve already-collected packs/rounds when re-entering setup from lobby.
+      // Only initialise on a truly fresh setup (nothing collected yet).
+      if (!state.setupRoundsTotal && Object.keys(state.setupRoundPacks || {}).length === 0) {
+        state.setupRoundsTotal = null;
+        state.setupCurrentRound = 1;
+        state.setupRoundPacks = {};
+        state.editingRound = null;
+      }
       render(true); break;
     case 'leave-mode-select': state.subScreen = null; render(true); break;
     case 'pick-rounds':
@@ -3425,6 +3439,8 @@ async function leave(){
   state.screen = 'home'; state.code=''; state.room=null; state.isHost=false;
   state.subScreen=null; state.setupSource=null; state.setupAiPreview=null;
   state.setupManualPack=null; state.setupFilePack=null;
+  state.setupRoundPacks={}; state.setupRoundsTotal=null; state.editingRound=null;
+  state.setupFinalQ={category:'', q:'', a:''};
   state.err=''; state.setupErr='';
   state.lastRenderHash = '';
   render(true);
