@@ -36,10 +36,15 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.17';
+const APP_VERSION = '1.18';
 const CHANGELOG = [
+  { v: '1.18', date: '16.06.2026', changes: [
+    'Кнопка «Базер завис? Оновити» — якщо у гравця завис базер, можна перепідключитись',
+    'Додано діагностику базера (видно причину в консолі браузера)',
+  ]},
   { v: '1.17', date: '16.06.2026', changes: [
     'Новий хардкор-режим базера: 1 сек кулдаун між натисканнями (антиспам)',
+    'Натиснеш зарано (до відкриття базера) — отримаєш штраф, хто дочекався виграє',
     'Кнопка трясеться якщо тиснути занадто часто в хардкорі',
   ]},
   { v: '1.16', date: '16.06.2026', changes: [
@@ -1500,7 +1505,11 @@ function viewQuestion(){
             <div style="font-size:13px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:8px;">Базер відкриється через</div>
             <div id="countdown-num" style="font-family:'Fraunces',serif; font-weight:900; font-size:72px; color:var(--gold); line-height:1;">${sec}</div>
             <div style="margin-top:8px; font-size:13px; color:var(--ink-dim);">${state.isHost ? 'Читай питання вголос!' : 'Приготуйся натискати!'}</div>
-          </div>`;
+          </div>
+          ${!state.isHost && r.antiSpamConfig && !iAttempted ? `
+            <button class="buzz-btn" data-action="buzz">НАТИСНИ ЩОБ ВІДПОВІСТИ</button>
+            <div style="text-align:center; margin-top:8px; font-size:12px; color:var(--accent);">🔥 Хардкор: натиснеш зарано — отримаєш 1 сек штрафу!</div>
+          ` : ''}`;
         })() : ''}
 
         ${r.questionState === 'reading' ? (state.isHost ? `
@@ -1512,6 +1521,10 @@ function viewQuestion(){
           <div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:16px;">
             ⏳ Ведучий читає питання... баззер скоро відкриється
           </div>
+          ${r.antiSpamConfig && !iAttempted ? `
+            <button class="buzz-btn" data-action="buzz">НАТИСНИ ЩОБ ВІДПОВІСТИ</button>
+            <div style="text-align:center; margin-top:8px; font-size:12px; color:var(--accent);">🔥 Хардкор: натиснеш зарано — отримаєш 1 сек штрафу!</div>
+          ` : ''}
         `) : ''}
 
         ${buzzed ? `
@@ -1531,7 +1544,7 @@ function viewQuestion(){
           <button class="buzz-btn" data-action="buzz" ${iAttempted?'disabled':''}>
             ${iAttempted ? 'Ти вже відповідав' : 'НАТИСНИ ЩОБ ВІДПОВІСТИ'}
           </button>
-          ${!iAttempted ? `<div style="text-align:center; margin-top:8px; font-size:12px; color:var(--ink-dim);">або натисни <b>Пробіл</b> на клавіатурі${r.antiSpamConfig ? ' · 🔥 хардкор: 1 сек між натисканнями' : ''}</div>` : ''}
+          ${!iAttempted ? `<div style="text-align:center; margin-top:8px; font-size:12px; color:var(--ink-dim);">або натисни <b>Пробіл</b> на клавіатурі${r.antiSpamConfig ? ' · 🔥 хардкор: 1 сек між натисканнями' : ''}</div>` : `<div style="text-align:center; margin-top:8px;"><button class="btn btn-ghost btn-sm" data-action="resync">${icon('loader',12)} Базер завис? Оновити</button></div>`}
         ` : '')}
 
         ${state.isHost && r.questionState === 'buzzing' && !buzzed ? `
@@ -2451,6 +2464,7 @@ async function handleAction(e){
     case 'pick-cell': await pickCell(parseInt(el.dataset.ci,10), parseInt(el.dataset.qi,10)); break;
     case 'open-buzz': await openBuzz(); break;
     case 'buzz': await buzz(); break;
+    case 'resync': await resyncRoom(); break;
     case 'judge': await judge(el.dataset.correct); break;
     case 'reveal-answer': await revealAnswer(); break;
     case 'close-question': await closeQuestion(); break;
@@ -2986,33 +3000,66 @@ async function openBuzz(){
   });
 }
 
-async function buzz(){
-  if (state.isHost) return;
-  if (!state.myId) return; // auth not ready
+// Re-fetch fresh room state and re-attach the listener (fixes a stuck/frozen
+// realtime connection for a player whose buzzer appears unresponsive).
+async function resyncRoom(){
   if (!state.code) return;
+  try {
+    const fresh = await getRoom(state.code);
+    if (fresh) {
+      state.room = fresh;
+      // Clear any local cooldown that might be lingering
+      state.lastBuzzAttempt = 0;
+      state.buzzCooldownUntil = 0;
+      state.lastRenderHash = '';
+    }
+    // Re-establish the realtime listener in case it dropped
+    attachRoomListener(state.code);
+    render(true);
+  } catch (e) {
+    console.error('[resync]', e);
+  }
+}
+
+async function buzz(){
+  const why = (reason) => { try { console.log('[buzz blocked]', reason, {myId: state.myId, qs: state.room?.questionState, attempted: state.room?.attemptedBy, buzzed: state.room?.buzzedPlayer}); } catch(_){} };
+  if (state.isHost) return why('isHost');
+  if (!state.myId) return why('no myId (auth not ready)');
+  if (!state.code) return why('no code');
   const r = state.room;
-  // Anti-spam (hardcore) mode: enforce a 1s cooldown between attempts.
-  // Every press (even a failed one) resets the cooldown — punishes mashing.
-  if (r && r.antiSpamConfig) {
+  if (!r || r.status !== 'question') return why('not in question');
+  if ((r.attemptedBy||[]).includes(state.myId)) return why('already in attemptedBy');
+
+  // Anti-spam (hardcore): every press counts toward the cooldown — even presses
+  // made BEFORE the buzzer opens. Pressing early = you're locked out for 1s, so
+  // someone who waits for the buzzer can beat a spammer to it.
+  if (r.antiSpamConfig) {
     const now0 = Date.now();
     if (state.lastBuzzAttempt && (now0 - state.lastBuzzAttempt) < 1000) {
-      // Still cooling down — show a brief visual hint and ignore the press
+      // Still cooling down — ignore + extend lockout (mashing hurts you)
       state.buzzCooldownUntil = state.lastBuzzAttempt + 1000;
       showBuzzCooldownHint();
-      state.lastBuzzAttempt = now0; // mashing keeps extending the lockout
-      return;
+      state.lastBuzzAttempt = now0;
+      return why('cooldown active');
     }
     state.lastBuzzAttempt = now0;
     state.buzzCooldownUntil = now0 + 1000;
   }
-  // Always work from fresh DB state to avoid stale local issues
+
+  // Buzzer must be open to actually register the buzz. If it's not open yet
+  // (reading/countdown) the press above already triggered the cooldown, but
+  // nothing is registered — the player simply wasted their press.
+  if (r.questionState !== 'buzzing') return why('buzzer not open (' + r.questionState + ')');
+  if (r.buzzedPlayer) return why('someone already buzzed: ' + r.buzzedPlayer);
+
+  // Work from fresh DB state to avoid stale local issues
   const fresh = await getRoom(state.code);
-  if (!fresh) return;
-  if (fresh.status !== 'question') return;
-  if (fresh.questionState !== 'buzzing') return;
-  if (fresh.buzzedPlayer) return; // someone already buzzed
-  if ((fresh.attemptedBy||[]).includes(state.myId)) return; // already tried this question
-  if (fresh.buzzPhaseDeadline && Date.now() > fresh.buzzPhaseDeadline) return; // time's up
+  if (!fresh) return why('no fresh room');
+  if (fresh.status !== 'question') return why('fresh: not question');
+  if (fresh.questionState !== 'buzzing') return why('fresh: not buzzing');
+  if (fresh.buzzedPlayer) return why('fresh: already buzzed');
+  if ((fresh.attemptedBy||[]).includes(state.myId)) return why('fresh: in attemptedBy');
+  if (fresh.buzzPhaseDeadline && Date.now() > fresh.buzzPhaseDeadline) return why('fresh: time up');
   const now = Date.now();
   const remaining = fresh.buzzPhaseDeadline ? Math.max(0, fresh.buzzPhaseDeadline - now) : buzzSec(fresh) * 1000;
   await update(ref(db, `rooms/${state.code}`), {
@@ -3544,10 +3591,15 @@ document.addEventListener('keydown', (e) => {
   if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) return;
   const r = state.room;
   if (!r) return;
-  // Player can buzz with space during buzzing phase
-  if (r.status === 'question' && r.questionState === 'buzzing' && !state.isHost) {
+  if (state.isHost) return;
+  if (r.status !== 'question') return;
+  if ((r.attemptedBy||[]).includes(state.myId)) return;
+  // In anti-spam mode, presses during reading/countdown also count (and get
+  // penalised) — that's the whole point. buzz() handles the logic.
+  const open = r.questionState === 'buzzing';
+  const earlyPhase = r.questionState === 'reading' || r.questionState === 'countdown';
+  if (open || (r.antiSpamConfig && earlyPhase)) {
     if (r.buzzedPlayer) return;
-    if ((r.attemptedBy||[]).includes(state.myId)) return;
     e.preventDefault();
     buzz();
   }
