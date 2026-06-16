@@ -36,8 +36,12 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.19';
+const APP_VERSION = '1.20';
 const CHANGELOG = [
+  { v: '1.20', date: '16.06.2026', changes: [
+    'Виправлено залипання базера: якщо ведучий проґавив таймаут, гра тепер сама йде далі',
+    'Натискання на самій межі таймера тепер зараховується',
+  ]},
   { v: '1.19', date: '16.06.2026', changes: [
     'Картинки більші і чіткіші (до 1200px), показуються майже на весь екран',
     'Щоб старі паки стали якіснішими — перезаваж їх',
@@ -3063,7 +3067,7 @@ async function buzz(){
   if (fresh.questionState !== 'buzzing') return why('fresh: not buzzing');
   if (fresh.buzzedPlayer) return why('fresh: already buzzed');
   if ((fresh.attemptedBy||[]).includes(state.myId)) return why('fresh: in attemptedBy');
-  if (fresh.buzzPhaseDeadline && Date.now() > fresh.buzzPhaseDeadline) return why('fresh: time up');
+  if (fresh.buzzPhaseDeadline && Date.now() > fresh.buzzPhaseDeadline + 1500) return why('fresh: time up'); // small grace so an edge press still counts
   const now = Date.now();
   const remaining = fresh.buzzPhaseDeadline ? Math.max(0, fresh.buzzPhaseDeadline - now) : buzzSec(fresh) * 1000;
   await update(ref(db, `rooms/${state.code}`), {
@@ -3679,29 +3683,32 @@ setInterval(() => {
   const r = state.room;
   if (!r) return;
   const now = Date.now();
+  // Failsafe grace: if the host doesn't advance a phase within 1.5s of the
+  // deadline (host backgrounded, lagging, disconnected), any client triggers it.
+  const GRACE = 1500;
   if (r.status === 'question') {
     if (r.questionState === 'countdown') {
       if (r.countdownDeadline && now >= r.countdownDeadline) {
-        if (state.isHost) openBuzzAfterCountdown();
+        if (state.isHost || now >= r.countdownDeadline + GRACE) openBuzzAfterCountdown();
       } else {
         updateTimerOnly();
       }
     } else if (r.questionState === 'buzzing') {
       if (r.buzzPhaseDeadline && now >= r.buzzPhaseDeadline) {
-        if (state.isHost) timeoutBuzzPhase();
+        if (state.isHost || now >= r.buzzPhaseDeadline + GRACE) timeoutBuzzPhase();
       } else {
         updateTimerOnly();
       }
     } else if (r.questionState === 'answering') {
       if (r.answerPhaseDeadline && now >= r.answerPhaseDeadline) {
-        if (state.isHost) timeoutAnswerPhase();
+        if (state.isHost || now >= r.answerPhaseDeadline + GRACE) timeoutAnswerPhase();
       } else {
         updateTimerOnly();
       }
     }
   } else if (r.status === 'final_answer') {
     if (r.finalPhaseDeadline && now >= r.finalPhaseDeadline) {
-      if (state.isHost) timeoutFinalPhase();
+      if (state.isHost || now >= r.finalPhaseDeadline + GRACE) timeoutFinalPhase();
     } else {
       updateTimerOnly();
     }
