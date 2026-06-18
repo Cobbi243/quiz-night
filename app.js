@@ -36,8 +36,12 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.21';
+const APP_VERSION = '1.22';
 const CHANGELOG = [
+  { v: '1.22', date: '18.06.2026', changes: [
+    'Виправлено: у фіналі бали тепер списуються навіть якщо є ставка, але нема відповіді',
+    'Розкрита відповідь тепер показується замість питання (не треба скролити)',
+  ]},
   { v: '1.21', date: '16.06.2026', changes: [
     'Виправлено базер що не працював у гравців зі збитим годинником на пристрої',
     'Усі таймери тепер синхронізовані з сервером, а не з годинником пристрою',
@@ -1467,23 +1471,26 @@ function viewQuestion(){
           <div class="q-cat">${esc(cat.name)}</div>
           <div class="q-value">${q.value}</div>
         </div>
-        <div class="q-text">
-          ${q.image ? `<img src="${q.image}" class="q-image" alt="">` : ''}
-          ${q.q && q.q.trim() ? `<div class="q-text-inner">${esc(q.q)}</div>` : ''}
-        </div>
         ${r.revealAnswer ? `
           <div class="q-answer-reveal">
             <div class="q-answer-reveal-label">ПРАВИЛЬНА ВІДПОВІДЬ</div>
-            ${q.answerImage ? `<img src="${q.answerImage}" class="q-image" style="max-height:50vh; margin-bottom:8px;" alt="">` : ''}
+            ${q.answerImage ? `<img src="${q.answerImage}" class="q-image" style="max-height:55vh; margin-bottom:8px;" alt="">` : ''}
             ${q.a && q.a.trim() ? `<div class="q-answer-reveal-text">${esc(q.a)}</div>` : ''}
+            ${(q.q && q.q.trim()) ? `<div style="margin-top:16px; font-size:13px; color:var(--ink-dim);">Питання: ${esc(q.q)}</div>` : ''}
           </div>
-        ` : (state.isHost ? `
-          <div style="margin-top:24px; padding:12px; background: rgba(74,222,128,0.08); border:1px dashed rgba(74,222,128,0.3); border-radius:12px; text-align:center;">
-            <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">ВІДПОВІДЬ (ТІЛЬКИ ТИ БАЧИШ)</div>
-            ${q.answerImage ? `<img src="${q.answerImage}" style="max-height:40vh; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
-            ${q.a && q.a.trim() ? `<div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--green);">${esc(q.a)}</div>` : ''}
+        ` : `
+          <div class="q-text">
+            ${q.image ? `<img src="${q.image}" class="q-image" alt="">` : ''}
+            ${q.q && q.q.trim() ? `<div class="q-text-inner">${esc(q.q)}</div>` : ''}
           </div>
-        ` : '')}
+          ${state.isHost ? `
+            <div style="margin-top:24px; padding:12px; background: rgba(74,222,128,0.08); border:1px dashed rgba(74,222,128,0.3); border-radius:12px; text-align:center;">
+              <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">ВІДПОВІДЬ (ТІЛЬКИ ТИ БАЧИШ)</div>
+              ${q.answerImage ? `<img src="${q.answerImage}" style="max-height:40vh; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
+              ${q.a && q.a.trim() ? `<div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--green);">${esc(q.a)}</div>` : ''}
+            </div>
+          ` : ''}
+        `}
       </div>
 
       <div style="margin-top:24px;">
@@ -1934,17 +1941,18 @@ function viewFinalReveal(){
   const judgement = r.finalJudgement || {};
   const base = r.finalBaseScores || {};
 
-  // Only players who actually submitted an answer participate in the reveal sequence.
+  // Everyone who placed a bid participates in the reveal — even if they didn't
+  // submit an answer (their bid still gets deducted as a wrong answer).
   // Order: smallest bid first → biggest bid last (classic Jeopardy drama).
   const participants = nonHost
-    .filter(p => bids[p.id] && bids[p.id].answerSubmitted)
+    .filter(p => bids[p.id] && bids[p.id].bidSubmitted)
     .sort((a, b) => {
       const ba = (typeof bids[a.id].bid === 'number') ? bids[a.id].bid : 0;
       const bb = (typeof bids[b.id].bid === 'number') ? bids[b.id].bid : 0;
       return ba - bb;
     });
-  // Players who didn't answer — shown separately at the end (no judging needed)
-  const nonParticipants = nonHost.filter(p => !bids[p.id] || !bids[p.id].answerSubmitted);
+  // Players who didn't even place a bid — shown separately, nothing to judge
+  const nonParticipants = nonHost.filter(p => !bids[p.id] || !bids[p.id].bidSubmitted);
 
   const revealIdx = r.finalRevealIndex || 0;
   const total = participants.length;
@@ -1965,7 +1973,7 @@ function viewFinalReveal(){
         <span style="font-size:20px;">${p.avatar}</span>
         <div style="flex:1; min-width:0;">
           <b style="display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(p.name)}</b>
-          <span style="font-size:13px; color:var(--ink-dim);">«${esc(sub.answer)}» · ставка ${safeBid}</span>
+          <span style="font-size:13px; color:var(--ink-dim);">${sub.answerSubmitted && sub.answer ? `«${esc(sub.answer)}»` : '⏱ не відповів'} · ставка ${safeBid}</span>
         </div>
         <div style="text-align:right;">
           <div style="font-size:12px; font-weight:700; color:${verdict==='correct'?'var(--green)':'var(--accent)'};">${verdict==='correct'?'✓':'✗'}</div>
@@ -1993,7 +2001,11 @@ function viewFinalReveal(){
       </div>
       <div style="background:var(--soft); padding:16px; border-radius:12px; text-align:center; margin-bottom:16px;">
         <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:6px;">ВІДПОВІДЬ</div>
-        <div style="font-family:'Fraunces',serif; font-weight:700; font-size:24px;">${esc(sub.answer)}</div>
+        ${sub.answerSubmitted && sub.answer ? `
+          <div style="font-family:'Fraunces',serif; font-weight:700; font-size:24px;">${esc(sub.answer)}</div>
+        ` : `
+          <div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--accent);">⏱ Не встиг відповісти</div>
+        `}
       </div>
       ${verdict ? `
         <div style="text-align:center; margin-bottom:8px;">
