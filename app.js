@@ -36,8 +36,12 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.22';
+const APP_VERSION = '1.23';
 const CHANGELOG = [
+  { v: '1.23', date: '22.06.2026', changes: [
+    'Можна робити переліки в стовпчик у питаннях і відповідях',
+    'У .docx — просто пиши з нового рядка; у тексті — пиши \\n де треба перенос',
+  ]},
   { v: '1.22', date: '18.06.2026', changes: [
     'Виправлено: у фіналі бали тепер списуються навіть якщо є ставка, але нема відповіді',
     'Розкрита відповідь тепер показується замість питання (не треба скролити)',
@@ -280,6 +284,12 @@ function esc(s){
   if (s == null) return '';
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+// Like esc() but normalises literal "\n" into real line breaks. Pair with a
+// container that has `white-space: pre-wrap` so the breaks render.
+function escMultiline(s){
+  if (s == null) return '';
+  return esc(String(s).replace(/\\n/g, '\n'));
+}
 function genCode(){
   let s=''; for(let i=0;i<4;i++) s += CODE_CHARS[Math.floor(Math.random()*CODE_CHARS.length)]; return s;
 }
@@ -452,7 +462,14 @@ async function parseTextToPack(text){
     if (parts.length >= 3 && cur) {
       const value = parseInt(parts[0], 10);
       if (!isNaN(value)) {
-        cur.questions.push({ value, q: parts[1].trim(), a: parts.slice(2).join(' | ').trim() });
+        // Allow `\n` (literal backslash-n) in the source to mean a line break,
+        // so authors can list items in a column inside a question or answer.
+        const unescapeBreaks = (s) => s.replace(/\\n/g, '\n');
+        cur.questions.push({
+          value,
+          q: unescapeBreaks(parts[1].trim()),
+          a: unescapeBreaks(parts.slice(2).join(' | ').trim())
+        });
       }
     }
   }
@@ -519,10 +536,12 @@ async function parseDocxFile(file){
     } else if (isCatMarker(text) || isQStart(text) || lines.length === 0) {
       lines.push({ text, images: [...b.images] });
     } else {
-      // Continuation: append text + images to the last Q block we have
+      // Continuation: append text + images to the last Q block we have.
+      // Join with a newline so multi-paragraph questions/answers keep their
+      // column layout (authors often list items on separate lines in Word).
       const lastIdx = lines.length - 1;
       if (isQStart(lines[lastIdx].text)) {
-        lines[lastIdx].text = lines[lastIdx].text + ' ' + text;
+        lines[lastIdx].text = lines[lastIdx].text + '\n' + text;
         lines[lastIdx].images.push(...b.images);
       } else {
         // No Q to merge into — keep block separate, will be ignored later
@@ -534,8 +553,10 @@ async function parseDocxFile(file){
   const totalImagesFound = lines.reduce((a,l)=>a+l.images.length, 0);
   console.log('[parseDocx] raw blocks:', rawBlocks.length, 'after merge:', lines.length, 'images:', totalImagesFound);
 
-  // Build text and parse first (without images)
-  const fullText = lines.map(l => l.text).join('\n');
+  // Build text and parse first (without images). Inner line breaks inside a Q
+  // block are escaped to literal \n so parseTextToPack keeps them on one line;
+  // parseTextToPack turns \n back into real breaks for display.
+  const fullText = lines.map(l => l.text.replace(/\n/g, '\\n')).join('\n');
   const pack = await parseTextToPack(fullText);
 
   // Now walk the block list and attach images.
@@ -1475,19 +1496,19 @@ function viewQuestion(){
           <div class="q-answer-reveal">
             <div class="q-answer-reveal-label">ПРАВИЛЬНА ВІДПОВІДЬ</div>
             ${q.answerImage ? `<img src="${q.answerImage}" class="q-image" style="max-height:55vh; margin-bottom:8px;" alt="">` : ''}
-            ${q.a && q.a.trim() ? `<div class="q-answer-reveal-text">${esc(q.a)}</div>` : ''}
-            ${(q.q && q.q.trim()) ? `<div style="margin-top:16px; font-size:13px; color:var(--ink-dim);">Питання: ${esc(q.q)}</div>` : ''}
+            ${q.a && q.a.trim() ? `<div class="q-answer-reveal-text">${escMultiline(q.a)}</div>` : ''}
+            ${(q.q && q.q.trim()) ? `<div style="margin-top:16px; font-size:13px; color:var(--ink-dim); white-space:pre-wrap;">Питання: ${escMultiline(q.q)}</div>` : ''}
           </div>
         ` : `
           <div class="q-text">
             ${q.image ? `<img src="${q.image}" class="q-image" alt="">` : ''}
-            ${q.q && q.q.trim() ? `<div class="q-text-inner">${esc(q.q)}</div>` : ''}
+            ${q.q && q.q.trim() ? `<div class="q-text-inner">${escMultiline(q.q)}</div>` : ''}
           </div>
           ${state.isHost ? `
             <div style="margin-top:24px; padding:12px; background: rgba(74,222,128,0.08); border:1px dashed rgba(74,222,128,0.3); border-radius:12px; text-align:center;">
               <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">ВІДПОВІДЬ (ТІЛЬКИ ТИ БАЧИШ)</div>
               ${q.answerImage ? `<img src="${q.answerImage}" style="max-height:40vh; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
-              ${q.a && q.a.trim() ? `<div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--green);">${esc(q.a)}</div>` : ''}
+              ${q.a && q.a.trim() ? `<div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--green); white-space:pre-wrap;">${escMultiline(q.a)}</div>` : ''}
             </div>
           ` : ''}
         `}
@@ -2204,7 +2225,10 @@ function viewFormatHelpModal(){
             Формат: <b style="color:var(--ink);">ВАРТІСТЬ | ПИТАННЯ | ВІДПОВІДЬ</b>.
             Розділювач — символ <code style="background:var(--soft); padding:1px 5px; border-radius:3px;">|</code>.
             Вартості: <b style="color:var(--ink);">200, 400, 600, 800, 1000</b>.
+            <br><br>
+            <b style="color:var(--ink);">Перелік у стовпчик:</b> щоб у питанні чи відповіді щось було з нового рядка, напиши <code style="background:var(--soft); padding:1px 5px; border-radius:3px;">\\n</code> там де треба перенос. У <b>.docx</b> можна просто писати з нового рядка в тій самій клітинці.
           </div>
+          <div style="background:var(--soft); padding:10px 14px; border-radius:8px; font-family:ui-monospace,monospace; font-size:13px; margin-bottom:16px; white-space:pre-wrap;">600 | Назви три кольори:\\nЧервоний\\nЗелений\\nСиній | будь-що</div>
 
           <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">4. Картинки (тільки .docx)</div>
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px; line-height:1.6;">
