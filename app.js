@@ -36,8 +36,11 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.23';
+const APP_VERSION = '1.24';
 const CHANGELOG = [
+  { v: '1.24', date: '22.06.2026', changes: [
+    'Можна додати пояснення до відповіді через // — показується окремо під відповіддю',
+  ]},
   { v: '1.23', date: '22.06.2026', changes: [
     'Можна робити переліки в стовпчик у питаннях і відповідях',
     'У .docx — просто пиши з нового рядка; у тексті — пиши \\n де треба перенос',
@@ -348,6 +351,7 @@ async function savePack(name, pack){
         value: q.value,
         q: q.q || '',
         a: q.a || '',
+        explanation: q.explanation || null,
         image: q.image || null,
         answerImage: q.answerImage || null,
       }))
@@ -465,11 +469,21 @@ async function parseTextToPack(text){
         // Allow `\n` (literal backslash-n) in the source to mean a line break,
         // so authors can list items in a column inside a question or answer.
         const unescapeBreaks = (s) => s.replace(/\\n/g, '\n');
-        cur.questions.push({
+        const rawAnswer = parts.slice(2).join(' | ').trim();
+        // Split answer and optional explanation on the first `//`
+        let answerText = rawAnswer, explanation = '';
+        const slashIdx = rawAnswer.indexOf('//');
+        if (slashIdx !== -1) {
+          answerText = rawAnswer.slice(0, slashIdx).trim();
+          explanation = rawAnswer.slice(slashIdx + 2).trim();
+        }
+        const qObj = {
           value,
           q: unescapeBreaks(parts[1].trim()),
-          a: unescapeBreaks(parts.slice(2).join(' | ').trim())
-        });
+          a: unescapeBreaks(answerText)
+        };
+        if (explanation) qObj.explanation = unescapeBreaks(explanation);
+        cur.questions.push(qObj);
       }
     }
   }
@@ -486,9 +500,9 @@ function normalizeCategory(cat){
     const v = VALUES[i];
     const found = sorted.find(q => q.value === v) || sorted[i];
     if (found) {
-      questions.push({ value: v, q: found.q, a: found.a, image: found.image, answerImage: found.answerImage });
+      questions.push({ value: v, q: found.q, a: found.a, explanation: found.explanation || null, image: found.image, answerImage: found.answerImage });
     } else {
-      questions.push({ value: v, q: '', a: '', image: null, answerImage: null });
+      questions.push({ value: v, q: '', a: '', explanation: null, image: null, answerImage: null });
     }
   }
   return { name: cat.name, questions };
@@ -1497,6 +1511,7 @@ function viewQuestion(){
             <div class="q-answer-reveal-label">ПРАВИЛЬНА ВІДПОВІДЬ</div>
             ${q.answerImage ? `<img src="${q.answerImage}" class="q-image" style="max-height:55vh; margin-bottom:8px;" alt="">` : ''}
             ${q.a && q.a.trim() ? `<div class="q-answer-reveal-text">${escMultiline(q.a)}</div>` : ''}
+            ${q.explanation && q.explanation.trim() ? `<div style="margin-top:10px; font-size:16px; font-weight:500; color:var(--green); opacity:0.85; white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
             ${(q.q && q.q.trim()) ? `<div style="margin-top:16px; font-size:13px; color:var(--ink-dim); white-space:pre-wrap;">Питання: ${escMultiline(q.q)}</div>` : ''}
           </div>
         ` : `
@@ -1509,6 +1524,7 @@ function viewQuestion(){
               <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">ВІДПОВІДЬ (ТІЛЬКИ ТИ БАЧИШ)</div>
               ${q.answerImage ? `<img src="${q.answerImage}" style="max-height:40vh; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
               ${q.a && q.a.trim() ? `<div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--green); white-space:pre-wrap;">${escMultiline(q.a)}</div>` : ''}
+              ${q.explanation && q.explanation.trim() ? `<div style="margin-top:6px; font-size:14px; font-weight:500; color:var(--green); opacity:0.8; white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
             </div>
           ` : ''}
         `}
@@ -2227,8 +2243,11 @@ function viewFormatHelpModal(){
             Вартості: <b style="color:var(--ink);">200, 400, 600, 800, 1000</b>.
             <br><br>
             <b style="color:var(--ink);">Перелік у стовпчик:</b> щоб у питанні чи відповіді щось було з нового рядка, напиши <code style="background:var(--soft); padding:1px 5px; border-radius:3px;">\\n</code> там де треба перенос. У <b>.docx</b> можна просто писати з нового рядка в тій самій клітинці.
+            <br><br>
+            <b style="color:var(--ink);">Пояснення до відповіді:</b> після відповіді постав <code style="background:var(--soft); padding:1px 5px; border-radius:3px;">//</code> і допиши пояснення — воно покажеться окремо під відповіддю.
           </div>
-          <div style="background:var(--soft); padding:10px 14px; border-radius:8px; font-family:ui-monospace,monospace; font-size:13px; margin-bottom:16px; white-space:pre-wrap;">600 | Назви три кольори:\\nЧервоний\\nЗелений\\nСиній | будь-що</div>
+          <div style="background:var(--soft); padding:10px 14px; border-radius:8px; font-family:ui-monospace,monospace; font-size:13px; margin-bottom:16px; white-space:pre-wrap;">600 | Назви три кольори:\\nЧервоний\\nЗелений\\nСиній | будь-що
+400 | Столиця Австралії? | Канберра // не Сідней, як часто думають</div>
 
           <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">4. Картинки (тільки .docx)</div>
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px; line-height:1.6;">
@@ -2931,7 +2950,7 @@ async function startGame(pack){
       name: c.name,
       questions: c.questions.slice(0, QS_PER_CAT).map((q, i) => ({
         value: VALUES[i] * valueMult,
-        q: q.q, a: q.a, image: q.image || null, answerImage: q.answerImage || null,
+        q: q.q, a: q.a, explanation: q.explanation || null, image: q.image || null, answerImage: q.answerImage || null,
       }))
     }))
   };
