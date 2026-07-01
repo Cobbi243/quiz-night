@@ -36,8 +36,11 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.24';
+const APP_VERSION = '1.25';
 const CHANGELOG = [
+  { v: '1.25', date: '30.06.2026', changes: [
+    'Виправлено блимання екрану коли ведучий роздає бали',
+  ]},
   { v: '1.24', date: '22.06.2026', changes: [
     'Можна додати пояснення до відповіді через // — показується окремо під відповіддю',
   ]},
@@ -2304,7 +2307,7 @@ function viewScoreEditModal(){
       <div class="modal" data-stop="1">
         <div class="modal-title">${p.avatar} ${esc(p.name)}</div>
         <div class="modal-subtitle">Корекція балів вручну. Зміни синхронізуються одразу.</div>
-        <div class="modal-score ${current < 0 ? 'negative' : ''}">${current > 0 ? '+' : ''}${current}</div>
+        <div class="modal-score ${current < 0 ? 'negative' : ''}" id="modal-score-value">${current > 0 ? '+' : ''}${current}</div>
 
         <div class="score-buttons">
           <button class="score-btn minus" data-action="score-delta" data-delta="-1000">−1000</button>
@@ -2824,6 +2827,15 @@ function attachRoomListener(code){
       if (wanted && state.screen !== wanted && ['lobby','board','question','results'].includes(state.screen)) {
         state.screen = wanted;
       }
+    }
+    // If the host has the score-edit modal open, avoid a full re-render (it would
+    // flicker). Just refresh the score number shown in the modal incrementally.
+    if (state.editingScorePlayerId && document.getElementById('modal-score-value')) {
+      const p = data.players && data.players[state.editingScorePlayerId];
+      if (p) updateScoreModalOnly(p.score || 0);
+      // Update the underlying hash so a later real change still renders
+      state.lastRenderHash = computeHash();
+      return;
     }
     render();
   });
@@ -3548,9 +3560,11 @@ async function applyScoreDelta(delta){
   const pid = state.editingScorePlayerId;
   const cur = r.players[pid].score || 0;
   const next = cur + delta;
-  await update(ref(db, `rooms/${state.code}/players/${pid}`), { score: next });
-  // Update input value too so it stays in sync
-  state.scoreEditInputValue = '';
+  // Optimistic local update + incremental DOM update (no full render → no flicker)
+  r.players[pid].score = next;
+  updateScoreModalOnly(next);
+  // Persist in the background
+  update(ref(db, `rooms/${state.code}/players/${pid}`), { score: next }).catch(e => console.error('[score]', e));
 }
 
 async function applyScoreExact(){
@@ -3560,10 +3574,23 @@ async function applyScoreExact(){
   const v = parseInt(raw, 10);
   if (isNaN(v)) return;
   const pid = state.editingScorePlayerId;
-  await update(ref(db, `rooms/${state.code}/players/${pid}`), { score: v });
+  const r = state.room;
+  if (r && r.players && r.players[pid]) r.players[pid].score = v;
   state.scoreEditInputValue = '';
-  // Keep modal open so host can see the new value
-  render(true);
+  updateScoreModalOnly(v);
+  update(ref(db, `rooms/${state.code}/players/${pid}`), { score: v }).catch(e => console.error('[score]', e));
+}
+
+// Update only the score number shown in the open edit modal — avoids a full
+// re-render (which causes a visible flicker) while the host taps +/- buttons.
+function updateScoreModalOnly(next){
+  const el = document.getElementById('modal-score-value');
+  if (el) {
+    el.textContent = (next > 0 ? '+' : '') + next;
+    el.classList.toggle('negative', next < 0);
+  }
+  const inp = document.getElementById('score-edit-input');
+  if (inp && document.activeElement !== inp) inp.value = String(next);
 }
 
 async function kickPlayer(pid){
