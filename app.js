@@ -36,8 +36,11 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.25';
+const APP_VERSION = '1.26';
 const CHANGELOG = [
+  { v: '1.26', date: '20.07.2026', changes: [
+    'В автовідліку базера додано варіант 1 секунда',
+  ]},
   { v: '1.25', date: '30.06.2026', changes: [
     'Виправлено блимання екрану коли ведучий роздає бали',
   ]},
@@ -1136,7 +1139,7 @@ function viewModeSelect(){
           </div>
           ${state.setupBuzzMode === 'countdown' ? `
             <div style="font-size:13px; color:var(--ink-dim); margin-top:12px; margin-bottom:8px;">Скільки секунд відліку перед базером:</div>
-            <div class="timer-chip-row">${[3,5,7,10].map(v => `<button class="timer-chip ${state.setupCountdownSeconds===v?'active':''}" data-action="set-countdown-sec" data-sec="${v}">${v}с</button>`).join('')}</div>
+            <div class="timer-chip-row">${[1,3,5,7,10].map(v => `<button class="timer-chip ${state.setupCountdownSeconds===v?'active':''}" data-action="set-countdown-sec" data-sec="${v}">${v}с</button>`).join('')}</div>
           ` : ''}
           <div style="font-size:13px; color:var(--ink-dim); margin-top:16px; margin-bottom:8px;">🎯 РЕЖИМ НАТИСКАННЯ БАЗЕРА</div>
           <div style="display:flex; flex-direction:column; gap:8px;">
