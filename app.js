@@ -87,8 +87,16 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.36';
+const APP_VERSION = '1.38';
 const CHANGELOG = [
+  { v: '1.38', date: '27.07.2026', changes: [
+    'Виправлено: кнопка «прикріпити аудіо» не реагувала на натискання',
+  ]},
+  { v: '1.37', date: '27.07.2026', changes: [
+    'НОВЕ: відео з YouTube прямо в питанні — постав [yt:посилання 15-45] у тексті',
+    'Числа задають з якої по яку секунду грати фрагмент',
+    'Працює і для музики, і для відео — нічого заливати не треба',
+  ]},
   { v: '1.36', date: '27.07.2026', changes: [
     'НОВЕ: аудіопитання — прикріпи свій запис до будь-якого питання',
     'Після завантаження пака біля кожного питання є кнопка «прикріпити аудіо»',
@@ -476,6 +484,7 @@ async function savePack(name, pack){
         image: q.image || null,
         answerImage: q.answerImage || null,
         audio: q.audio || null,
+        youtube: q.youtube || null,
       }))
     }))
   };
@@ -599,11 +608,14 @@ async function parseTextToPack(text){
           answerText = rawAnswer.slice(0, slashIdx).trim();
           explanation = rawAnswer.slice(slashIdx + 2).trim();
         }
+        const rawQ = unescapeBreaks(parts[1].trim());
+        const ex = extractYouTube(rawQ);
         const qObj = {
           value,
-          q: unescapeBreaks(parts[1].trim()),
+          q: ex.clean,
           a: unescapeBreaks(answerText)
         };
+        if (ex.yt) qObj.youtube = ex.yt;
         if (explanation) qObj.explanation = unescapeBreaks(explanation);
         cur.questions.push(qObj);
       }
@@ -614,6 +626,27 @@ async function parseTextToPack(text){
   return result;
 }
 
+
+// Extracts a [yt:ID 15-45] marker from text. Accepts a raw video id or a full
+// YouTube URL, with optional start-end seconds. Returns {clean, yt}.
+function extractYouTube(text){
+  if (!text) return { clean: text, yt: null };
+  const re = /\[yt:\s*([^\]\s]+)(?:\s+(\d+)\s*-\s*(\d+))?\s*\]/i;
+  const m = text.match(re);
+  if (!m) return { clean: text, yt: null };
+  let raw = m[1];
+  let id = raw;
+  // Pull the id out of common URL shapes
+  const urlMatch = raw.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([A-Za-z0-9_-]{6,})/);
+  if (urlMatch) id = urlMatch[1];
+  id = id.replace(/[^A-Za-z0-9_-]/g, '');
+  const yt = { id };
+  if (m[2]) yt.start = parseInt(m[2], 10);
+  if (m[3]) yt.end = parseInt(m[3], 10);
+  const clean = text.replace(re, '').replace(/\s{2,}/g, ' ').trim();
+  return { clean, yt };
+}
+
 function normalizeCategory(cat){
   // Sort questions by value, fill missing with standard VALUES
   const sorted = (cat.questions||[]).sort((a,b)=>a.value-b.value);
@@ -622,9 +655,9 @@ function normalizeCategory(cat){
     const v = VALUES[i];
     const found = sorted.find(q => q.value === v) || sorted[i];
     if (found) {
-      questions.push({ value: v, q: found.q, a: found.a, explanation: found.explanation || null, image: found.image, answerImage: found.answerImage, audio: found.audio || null });
+      questions.push({ value: v, q: found.q, a: found.a, explanation: found.explanation || null, image: found.image, answerImage: found.answerImage, audio: found.audio || null, youtube: found.youtube || null });
     } else {
-      questions.push({ value: v, q: '', a: '', explanation: null, image: null, answerImage: null, audio: null });
+      questions.push({ value: v, q: '', a: '', explanation: null, image: null, answerImage: null, audio: null, youtube: null });
     }
   }
   return { name: cat.name, questions };
@@ -1064,6 +1097,8 @@ function render(force){
   }
   // Always-present version badge (top-right)
   html += `<button class="version-badge" data-action="show-changelog" title="Що нового">v${APP_VERSION}</button>`;
+  // Always-present hidden input used for attaching audio to questions
+  html += `<input type="file" id="audio-input" accept="audio/*" style="display:none;">`;
   // Chat widget — visible whenever inside a room
   if (state.room && state.code) {
     html += viewChatWidget();
@@ -1456,7 +1491,6 @@ function viewSetupFile(){
         <div class="dropzone-sub">або перетягни сюди .docx / .txt</div>
       </div>
       <input type="file" id="file-input" accept=".docx,.txt" style="display:none;">
-      <input type="file" id="audio-input" accept="audio/*" style="display:none;">
 
       <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; justify-content:center;">
         <button class="btn btn-ghost btn-sm" data-action="show-format-help">
@@ -1492,6 +1526,7 @@ function viewSetupFile(){
                   <div><span class="v">${q.value}</span> · ${qDisplay}${imgIcon}</div>
                   <div class="a">✓ ${aDisplay}${ansImgIcon}</div>
                   <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+                    ${q.youtube && q.youtube.id ? `<span style="font-size:12px; color:var(--gold);">🎬 відео</span>` : ''}
                     ${q.audio ? `
                       <span style="font-size:12px; color:var(--green);">🔊 аудіо прикріплено</span>
                       <button class="btn btn-ghost btn-sm" data-action="remove-audio" data-ci="${ci}" data-qi="${qi}" style="padding:2px 8px; font-size:11px;">прибрати</button>
@@ -1755,6 +1790,14 @@ function viewQuestion(){
       </div>`;
   } else {
     stageBody = `
+      ${q.youtube && q.youtube.id ? `
+        <div class="yt-wrap">
+          <iframe
+            src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
+            title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+        </div>
+        ${state.isHost ? `<div style="font-size:12px; color:var(--ink-dim);">Натисни ▶ і поділись звуком/екраном щоб усі бачили</div>` : ''}
+      ` : ''}
       ${q.audio ? `
         <div class="audio-player">
           <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.12em; text-transform:uppercase; margin-bottom:8px;">🔊 Аудіопитання</div>
@@ -2697,9 +2740,14 @@ function viewFormatHelpModal(){
             <b style="color:var(--ink);">Перелік у стовпчик:</b> щоб у питанні чи відповіді щось було з нового рядка, напиши <code style="background:var(--soft); padding:1px 5px; border-radius:3px;">\\n</code> там де треба перенос. У <b>.docx</b> можна просто писати з нового рядка в тій самій клітинці.
             <br><br>
             <b style="color:var(--ink);">Пояснення до відповіді:</b> після відповіді постав <code style="background:var(--soft); padding:1px 5px; border-radius:3px;">//</code> і допиши пояснення — воно покажеться окремо під відповіддю.
+            <br><br>
+            <b style="color:var(--ink);">Відео з YouTube:</b> встав у текст питання <code style="background:var(--soft); padding:1px 5px; border-radius:3px;">[yt:ПОСИЛАННЯ 15-45]</code> — програвач зʼявиться в питанні, а числа задають з якої по яку секунду грати (необовʼязково).
+            <br><br>
+            <b style="color:var(--ink);">Аудіо:</b> прикріплюється кнопкою біля питання вже після завантаження пака.
           </div>
           <div style="background:var(--soft); padding:10px 14px; border-radius:8px; font-family:ui-monospace,monospace; font-size:13px; margin-bottom:16px; white-space:pre-wrap;">600 | Назви три кольори:\\nЧервоний\\nЗелений\\nСиній | будь-що
-400 | Столиця Австралії? | Канберра // не Сідней, як часто думають</div>
+400 | Столиця Австралії? | Канберра // не Сідней, як часто думають
+800 | Що це за пісня? [yt:https://youtu.be/dQw4w9WgXcQ 15-40] | Never Gonna Give You Up</div>
 
           <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">4. Картинки (тільки .docx)</div>
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px; line-height:1.6;">
@@ -3533,7 +3581,7 @@ async function startGame(pack){
       name: c.name,
       questions: c.questions.slice(0, QS_PER_CAT).map((q, i) => ({
         value: VALUES[i] * valueMult,
-        q: q.q, a: q.a, explanation: q.explanation || null, image: q.image || null, answerImage: q.answerImage || null, audio: q.audio || null,
+        q: q.q, a: q.a, explanation: q.explanation || null, image: q.image || null, answerImage: q.answerImage || null, audio: q.audio || null, youtube: q.youtube || null,
       }))
     }))
   };
