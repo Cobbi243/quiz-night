@@ -3,7 +3,7 @@
 // ============================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
 import {
-  getDatabase, ref, set, get, onValue, off, update, remove, child, serverTimestamp
+  getDatabase, ref, set, get, onValue, off, update, remove, child, serverTimestamp, runTransaction
 } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
 import {
   getAuth, signInAnonymously, onAuthStateChanged
@@ -34,10 +34,19 @@ const MAX_IMG_BYTES = 220_000; // ~220KB target after compression (higher to kee
 const BUZZ_SECONDS = 30;       // total time to buzz in (default)
 const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
+const FINAL_MIN_BID_CAP = 1000; // players with <=0 score can still bid up to this
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.26';
+const APP_VERSION = '1.28';
 const CHANGELOG = [
+  { v: '1.28', date: '27.07.2026', changes: [
+    'Базер: тепер одразу показує того хто справді натиснув першим (без миготіння чужого імені)',
+    'Курсор більше не злітає з поля коли хтось інший оновлює бали',
+  ]},
+  { v: '1.27', date: '27.07.2026', changes: [
+    'Виправлено: у фіналі гравець з нулем/мінусом балів тепер теж може поставити ставку (до 1000)',
+    'Виправлено рідкісний баг: питання інколи одразу показувало відповідь і не зникало з дошки',
+  ]},
   { v: '1.26', date: '20.07.2026', changes: [
     'В автовідліку базера додано варіант 1 секунда',
   ]},
@@ -277,6 +286,7 @@ let state = {
   chatInputLocal: '',
   chatLastSeenTs: 0,
   lastRenderHash: '',
+  _pendingRenderTimer: null,
   unsubscribeRoom: null,
 };
 
@@ -857,6 +867,25 @@ function computeHash(){
 function render(force){
   const newHash = computeHash();
   if (!force && newHash === state.lastRenderHash) return;
+
+  // If the user is actively typing in a text field and this isn't a forced
+  // render, defer the re-render slightly so their cursor doesn't jump. A pending
+  // render is scheduled; the newest state will be drawn once typing settles.
+  if (!force) {
+    const a = document.activeElement;
+    const typing = a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && a.id !== 'score-edit-input';
+    if (typing) {
+      if (state._pendingRenderTimer) clearTimeout(state._pendingRenderTimer);
+      state._pendingRenderTimer = setTimeout(() => {
+        state._pendingRenderTimer = null;
+        render(true);
+      }, 1200);
+      // Still update the hash so we don't lose the change
+      state.lastRenderHash = newHash;
+      return;
+    }
+  }
+  if (state._pendingRenderTimer) { clearTimeout(state._pendingRenderTimer); state._pendingRenderTimer = null; }
   state.lastRenderHash = newHash;
 
   const active = document.activeElement;
@@ -1799,7 +1828,7 @@ function viewFinalBid(){
   const nonHost = players.filter(p => p.id !== r.hostId);
   const me = players.find(p => p.id === state.myId);
   const myBids = r.finalBids || {};
-  const myScore = Math.max(0, me?.score || 0);
+  const myScore = Math.max(FINAL_MIN_BID_CAP, me?.score || 0);
   const allBidsSubmittedCount = Object.values(myBids).filter(b => b && b.bidSubmitted).length;
 
   if (state.isHost) {
@@ -1865,6 +1894,7 @@ function viewFinalBid(){
           <div style="font-family:'Fraunces',serif; font-size:36px; font-weight:900; color:var(--gold); margin-bottom:16px;">${me?.score || 0}</div>
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">СКІЛЬКИ СТАВИШ (0 — ${myScore})</div>
           <input type="number" class="input" id="final-bid" min="0" max="${myScore}" value="${bid}" style="font-family:'Fraunces',serif; font-size:24px; font-weight:700; color:var(--accent);">
+          ${(me?.score || 0) < FINAL_MIN_BID_CAP ? `<div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">У тебе мало балів, тож можеш поставити до ${FINAL_MIN_BID_CAP} — маєш шанс відігратись 🎯</div>` : ''}
         </div>
         <div id="final-bid-err" class="err-text" style="display:${validBid ? 'none' : 'block'};">Ставка має бути від 0 до ${myScore}</div>
         <button id="final-submit-btn" class="btn btn-accent btn-lg btn-full" data-action="submit-final-bid" ${!validBid ? 'disabled' : ''} style="margin-top:16px;">
@@ -3041,6 +3071,7 @@ async function pickCell(ci, qi){
     answerPhaseDeadline: null,
     countdownDeadline: null,
     revealAnswer: false,
+    phaseStartedAt: now,
     status: 'question'
   };
   if (mode === 'manual') {
@@ -3151,11 +3182,23 @@ async function buzz(){
   let remaining = buzzSec(fresh) * 1000;
   if (fresh.buzzPhaseDeadline) {
     const calc = fresh.buzzPhaseDeadline - now;
-    // Clamp to a sane range in case of any residual skew
     remaining = Math.max(1000, Math.min(buzzSec(fresh) * 1000, calc > 0 ? calc : buzzSec(fresh) * 1000));
   }
+  // Atomically claim the buzzer: only the FIRST writer wins. Concurrent buzzes
+  // won't overwrite each other, so the wrong name never briefly appears.
+  const buzzedRef = ref(db, `rooms/${state.code}/buzzedPlayer`);
+  try {
+    const res = await runTransaction(buzzedRef, (cur) => {
+      if (cur) return; // someone already buzzed — abort, keep theirs
+      return state.myId;
+    });
+    if (!res.committed || res.snapshot.val() !== state.myId) return; // we didn't win
+  } catch (e) {
+    console.error('[buzz transaction]', e);
+    return;
+  }
+  // We won the buzzer — set the answering phase fields
   await update(ref(db, `rooms/${state.code}`), {
-    buzzedPlayer: state.myId,
     questionState: 'answering',
     buzzPhaseRemainingMs: remaining,
     answerPhaseDeadline: now + answerSec(fresh) * 1000,
@@ -3245,6 +3288,8 @@ async function timeoutBuzzPhase(){
   // Only fire if we're still in buzzing and deadline has passed
   if (fresh.questionState !== 'buzzing') return;
   if (!fresh.buzzPhaseDeadline || serverNow() < fresh.buzzPhaseDeadline) return;
+  // Never auto-close a question that just started (guards against clock races)
+  if (fresh.phaseStartedAt && serverNow() - fresh.phaseStartedAt < 1200) return;
   if (!fresh.currentCell) return;
   const {ci, qi} = fresh.currentCell;
   const used = { ...(fresh.usedCells||{}), [`${ci}-${qi}`]: true };
@@ -3445,7 +3490,9 @@ async function submitFinalBid(){
   if (r.status !== 'final_bid') return;
   const me = r.players?.[state.myId];
   if (!me) return;
-  const maxBid = Math.max(0, me.score || 0);
+  // If a player has 0 or negative score, still let them bid up to a floor so they
+  // can play the final (classic Jeopardy rule). Otherwise cap at their score.
+  const maxBid = Math.max(FINAL_MIN_BID_CAP, me.score || 0);
   const bid = state.finalBidLocal;
   if (!Number.isInteger(bid) || bid < 0 || bid > maxBid) return;
   await update(ref(db, `rooms/${state.code}/finalBids/${state.myId}`), {
@@ -3736,7 +3783,7 @@ function updateFinalSubmitButton(){
 
   if (r.status === 'final_bid') {
     // Phase 1: only the bid matters
-    const myScore = Math.max(0, me.score || 0);
+    const myScore = Math.max(FINAL_MIN_BID_CAP, me.score || 0);
     const bid = state.finalBidLocal;
     const validBid = Number.isInteger(bid) && bid >= 0 && bid <= myScore;
     if (err) err.style.display = validBid ? 'none' : 'block';
@@ -3797,28 +3844,31 @@ setInterval(() => {
   // Failsafe grace: if the host doesn't advance a phase within 1.5s of the
   // deadline (host backgrounded, lagging, disconnected), any client triggers it.
   const GRACE = 1500;
+  // Small buffer so a timeout never fires in the same instant a deadline is set
+  // (prevents a race where picking a new question is immediately auto-closed).
+  const BUF = 400;
   if (r.status === 'question') {
     if (r.questionState === 'countdown') {
-      if (r.countdownDeadline && now >= r.countdownDeadline) {
+      if (r.countdownDeadline && now >= r.countdownDeadline + BUF) {
         if (state.isHost || now >= r.countdownDeadline + GRACE) openBuzzAfterCountdown();
       } else {
         updateTimerOnly();
       }
     } else if (r.questionState === 'buzzing') {
-      if (r.buzzPhaseDeadline && now >= r.buzzPhaseDeadline) {
+      if (r.buzzPhaseDeadline && now >= r.buzzPhaseDeadline + BUF) {
         if (state.isHost || now >= r.buzzPhaseDeadline + GRACE) timeoutBuzzPhase();
       } else {
         updateTimerOnly();
       }
     } else if (r.questionState === 'answering') {
-      if (r.answerPhaseDeadline && now >= r.answerPhaseDeadline) {
+      if (r.answerPhaseDeadline && now >= r.answerPhaseDeadline + BUF) {
         if (state.isHost || now >= r.answerPhaseDeadline + GRACE) timeoutAnswerPhase();
       } else {
         updateTimerOnly();
       }
     }
   } else if (r.status === 'final_answer') {
-    if (r.finalPhaseDeadline && now >= r.finalPhaseDeadline) {
+    if (r.finalPhaseDeadline && now >= r.finalPhaseDeadline + BUF) {
       if (state.isHost || now >= r.finalPhaseDeadline + GRACE) timeoutFinalPhase();
     } else {
       updateTimerOnly();
