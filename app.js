@@ -87,8 +87,14 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.35';
+const APP_VERSION = '1.36';
 const CHANGELOG = [
+  { v: '1.36', date: '27.07.2026', changes: [
+    'НОВЕ: аудіопитання — прикріпи свій запис до будь-якого питання',
+    'Після завантаження пака біля кожного питання є кнопка «прикріпити аудіо»',
+    'Під час гри показується міні-плеєр з кнопкою відтворення',
+    'Ліміт запису — приблизно 15 секунд (до 300 КБ)',
+  ]},
   { v: '1.35', date: '27.07.2026', changes: [
     'НОВЕ: особиста статистика — перемоги, точність, рекорд, базери',
     'НОВЕ: 12 досягнень, які відкриваються за різні здобутки',
@@ -332,6 +338,7 @@ let state = {
   newAchievements: null,// ids unlocked in the game just finished
   myProfile: null,      // cached stats profile
   showStats: false,     // stats screen open
+  audioTarget: null,    // {ci,qi} awaiting an audio file
   authReady: false,
   err: '',
   loading: false,
@@ -468,6 +475,7 @@ async function savePack(name, pack){
         explanation: q.explanation || null,
         image: q.image || null,
         answerImage: q.answerImage || null,
+        audio: q.audio || null,
       }))
     }))
   };
@@ -614,9 +622,9 @@ function normalizeCategory(cat){
     const v = VALUES[i];
     const found = sorted.find(q => q.value === v) || sorted[i];
     if (found) {
-      questions.push({ value: v, q: found.q, a: found.a, explanation: found.explanation || null, image: found.image, answerImage: found.answerImage });
+      questions.push({ value: v, q: found.q, a: found.a, explanation: found.explanation || null, image: found.image, answerImage: found.answerImage, audio: found.audio || null });
     } else {
-      questions.push({ value: v, q: '', a: '', explanation: null, image: null, answerImage: null });
+      questions.push({ value: v, q: '', a: '', explanation: null, image: null, answerImage: null, audio: null });
     }
   }
   return { name: cat.name, questions };
@@ -1448,6 +1456,7 @@ function viewSetupFile(){
         <div class="dropzone-sub">або перетягни сюди .docx / .txt</div>
       </div>
       <input type="file" id="file-input" accept=".docx,.txt" style="display:none;">
+      <input type="file" id="audio-input" accept="audio/*" style="display:none;">
 
       <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; justify-content:center;">
         <button class="btn btn-ghost btn-sm" data-action="show-format-help">
@@ -1460,10 +1469,10 @@ function viewSetupFile(){
     ` : `
       <div class="card parsed-preview" style="margin-bottom:16px;">
         <div style="font-size:14px; color:var(--ink-dim); margin-bottom:12px;">Знайдено: ${p.categories.length} категорій</div>
-        ${p.categories.map(c => `
+        ${p.categories.map((c, ci) => `
           <div class="parsed-cat">
             <div class="parsed-cat-name">${esc(c.name||'Без назви')}</div>
-            ${c.questions.map(q => {
+            ${c.questions.map((q, qi) => {
               const hasText = q.q && q.q.trim();
               const hasImage = !!q.image;
               let qDisplay;
@@ -1482,6 +1491,14 @@ function viewSetupFile(){
                 <div class="parsed-q">
                   <div><span class="v">${q.value}</span> · ${qDisplay}${imgIcon}</div>
                   <div class="a">✓ ${aDisplay}${ansImgIcon}</div>
+                  <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+                    ${q.audio ? `
+                      <span style="font-size:12px; color:var(--green);">🔊 аудіо прикріплено</span>
+                      <button class="btn btn-ghost btn-sm" data-action="remove-audio" data-ci="${ci}" data-qi="${qi}" style="padding:2px 8px; font-size:11px;">прибрати</button>
+                    ` : `
+                      <button class="btn btn-ghost btn-sm" data-action="attach-audio" data-ci="${ci}" data-qi="${qi}" style="padding:2px 8px; font-size:11px; color:var(--ink-dim);">🔊 прикріпити аудіо</button>
+                    `}
+                  </div>
                 </div>
               `;
             }).join('')}
@@ -1738,6 +1755,13 @@ function viewQuestion(){
       </div>`;
   } else {
     stageBody = `
+      ${q.audio ? `
+        <div class="audio-player">
+          <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.12em; text-transform:uppercase; margin-bottom:8px;">🔊 Аудіопитання</div>
+          <audio id="q-audio" src="${q.audio}" controls preload="auto" style="width:100%; max-width:420px;"></audio>
+          ${state.isHost ? `<div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Увімкни звук на гучномовець, щоб усі чули</div>` : ''}
+        </div>
+      ` : ''}
       ${q.image ? `<img src="${q.image}" class="q-image" style="max-height:42vh;" alt="">` : ''}
       ${q.q && q.q.trim() ? `<div class="qs-question-text ${sizeClass}">${escMultiline(q.q)}</div>` : ''}
       ${state.isHost ? `
@@ -2844,6 +2868,44 @@ function attachListeners(){
     state.finalAnswerLocal = e.target.value;
     updateFinalSubmitButton();
   });
+  // Audio attach input
+  const audioIn = document.getElementById('audio-input');
+  if (audioIn && !audioIn._bound) {
+    audioIn._bound = true;
+    audioIn.addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f || !state.audioTarget) return;
+      const MAX = 260_000; // ~260KB of base64
+      if (f.size > 400_000) {
+        state.setupErr = 'Аудіофайл завеликий (максимум ~300 КБ, це приблизно 15-20 секунд). Запиши коротше.';
+        render(true); return;
+      }
+      try {
+        const dataUrl = await new Promise((res, rej) => {
+          const rd = new FileReader();
+          rd.onload = () => res(rd.result);
+          rd.onerror = () => rej(new Error('read failed'));
+          rd.readAsDataURL(f);
+        });
+        if (dataUrl.length > MAX * 1.4) {
+          state.setupErr = 'Аудіо завелике після кодування. Спробуй коротший запис.';
+          render(true); return;
+        }
+        const { ci, qi } = state.audioTarget;
+        const pack = state.setupFilePack || state.setupAiPreview || state.setupManualPack;
+        if (pack?.categories?.[ci]?.questions?.[qi]) {
+          pack.categories[ci].questions[qi].audio = dataUrl;
+          state.setupErr = '';
+        }
+        state.audioTarget = null;
+        render(true);
+      } catch (err) {
+        state.setupErr = 'Не вдалося прочитати аудіофайл';
+        render(true);
+      }
+    });
+  }
+
   // Daily Double bet input
   const ddInp = document.getElementById('dd-bid');
   if (ddInp) {
@@ -3082,6 +3144,21 @@ async function handleAction(e){
         render(true);
       }
       break;
+    case 'attach-audio': {
+      state.audioTarget = { ci: parseInt(el.dataset.ci,10), qi: parseInt(el.dataset.qi,10) };
+      const ai = document.getElementById('audio-input');
+      if (ai) { ai.value = ''; ai.click(); }
+      break;
+    }
+    case 'remove-audio': {
+      const ci = parseInt(el.dataset.ci,10), qi = parseInt(el.dataset.qi,10);
+      const pack = state.setupFilePack || state.setupAiPreview || state.setupManualPack;
+      if (pack?.categories?.[ci]?.questions?.[qi]) {
+        delete pack.categories[ci].questions[qi].audio;
+        render(true);
+      }
+      break;
+    }
     case 'open-stats':
       state.showStats = true;
       state.myProfile = await loadMyProfile();
@@ -3456,7 +3533,7 @@ async function startGame(pack){
       name: c.name,
       questions: c.questions.slice(0, QS_PER_CAT).map((q, i) => ({
         value: VALUES[i] * valueMult,
-        q: q.q, a: q.a, explanation: q.explanation || null, image: q.image || null, answerImage: q.answerImage || null,
+        q: q.q, a: q.a, explanation: q.explanation || null, image: q.image || null, answerImage: q.answerImage || null, audio: q.audio || null,
       }))
     }))
   };
