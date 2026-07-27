@@ -37,8 +37,12 @@ const FINAL_SECONDS = 90;      // time for players to submit final round bet+ans
 const FINAL_MIN_BID_CAP = 1000; // players with <=0 score can still bid up to this
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.28';
+const APP_VERSION = '1.29';
 const CHANGELOG = [
+  { v: '1.29', date: '27.07.2026', changes: [
+    'Екран питання більше не скролиться: текст сам зменшується, базер завжди знизу на видноті',
+    'Особливо помітно на телефоні — довгі питання тепер вміщаються',
+  ]},
   { v: '1.28', date: '27.07.2026', changes: [
     'Базер: тепер одразу показує того хто справді натиснув першим (без миготіння чужого імені)',
     'Курсор більше не злітає з поля коли хтось інший оновлює бали',
@@ -1530,163 +1534,159 @@ function viewQuestion(){
   const canIBuzz = !state.isHost && !buzzed && !iAttempted && r.questionState === 'buzzing';
   const iAmBuzzed = buzzed && buzzed.id === state.myId;
 
+  // Auto-size question text by length so long questions fit without page scroll
+  const qLen = (q.q || '').length;
+  const sizeClass = qLen > 220 ? 'xlong' : qLen > 110 ? 'long' : '';
+
+  // --- STAGE BODY (the question / answer area — scrolls internally if huge) ---
+  let stageBody = '';
+  if (r.revealAnswer) {
+    stageBody = `
+      <div class="q-answer-reveal" style="width:100%;">
+        <div class="q-answer-reveal-label">ПРАВИЛЬНА ВІДПОВІДЬ</div>
+        ${q.answerImage ? `<img src="${q.answerImage}" class="q-image" style="max-height:38vh; margin-bottom:8px;" alt="">` : ''}
+        ${q.a && q.a.trim() ? `<div class="q-answer-reveal-text">${escMultiline(q.a)}</div>` : ''}
+        ${q.explanation && q.explanation.trim() ? `<div style="margin-top:10px; font-size:16px; font-weight:500; color:var(--green); opacity:0.85; white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
+        ${(q.q && q.q.trim()) ? `<div style="margin-top:16px; font-size:13px; color:var(--ink-dim); white-space:pre-wrap;">Питання: ${escMultiline(q.q)}</div>` : ''}
+      </div>`;
+  } else {
+    stageBody = `
+      ${q.image ? `<img src="${q.image}" class="q-image" style="max-height:42vh;" alt="">` : ''}
+      ${q.q && q.q.trim() ? `<div class="qs-question-text ${sizeClass}">${escMultiline(q.q)}</div>` : ''}
+      ${state.isHost ? `
+        <div style="margin-top:16px; padding:12px; background: rgba(74,222,128,0.08); border:1px dashed rgba(74,222,128,0.3); border-radius:12px; max-width:700px;">
+          <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">ВІДПОВІДЬ (ТІЛЬКИ ТИ БАЧИШ)</div>
+          ${q.answerImage ? `<img src="${q.answerImage}" style="max-height:28vh; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
+          ${q.a && q.a.trim() ? `<div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--green); white-space:pre-wrap;">${escMultiline(q.a)}</div>` : ''}
+          ${q.explanation && q.explanation.trim() ? `<div style="margin-top:6px; font-size:14px; font-weight:500; color:var(--green); opacity:0.8; white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
+        </div>
+      ` : ''}`;
+  }
+
+  // --- TIMER BAR ---
+  const timerBar = (() => {
+    const now = serverNow();
+    if (r.questionState === 'buzzing') {
+      const total = buzzSec(r);
+      const deadline = r.buzzPhaseDeadline || (now + total * 1000);
+      const sec = Math.max(0, Math.ceil((deadline - now) / 1000));
+      const pct = Math.min(100, (sec / total) * 100);
+      return `<div class="timer-bar" id="timer-bar">
+        <div class="timer-bar-label">⏱ Натиснути баззер: <b id="timer-sec">${sec}</b> сек</div>
+        <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--accent);"></div></div>
+      </div>`;
+    }
+    if (r.questionState === 'answering') {
+      const total = answerSec(r);
+      const deadline = r.answerPhaseDeadline || (now + total * 1000);
+      const sec = Math.max(0, Math.ceil((deadline - now) / 1000));
+      const pct = Math.min(100, (sec / total) * 100);
+      return `<div class="timer-bar" id="timer-bar">
+        <div class="timer-bar-label">⏱ Відповідь: <b id="timer-sec">${sec}</b> сек</div>
+        <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--gold);"></div></div>
+      </div>`;
+    }
+    return '';
+  })();
+
+  // --- CONTROLS (buzz button / host judge / countdown / etc.) ---
+  let controls = '';
+
+  if (r.questionState === 'countdown' && r.countdownDeadline) {
+    const sec = Math.max(0, Math.ceil((r.countdownDeadline - serverNow()) / 1000));
+    controls += `<div style="text-align:center; padding:8px 0;">
+      <div style="font-size:12px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">Базер відкриється через</div>
+      <div id="countdown-num" style="font-family:'Fraunces',serif; font-weight:900; font-size:56px; color:var(--gold); line-height:1;">${sec}</div>
+      <div style="margin-top:4px; font-size:13px; color:var(--ink-dim);">${state.isHost ? 'Читай питання вголос!' : 'Приготуйся натискати!'}</div>
+    </div>`;
+    if (!state.isHost && r.antiSpamConfig && !iAttempted) {
+      controls += `<button class="buzz-btn" data-action="buzz">НАТИСНИ ЩОБ ВІДПОВІСТИ</button>
+        <div style="text-align:center; font-size:12px; color:var(--accent);">🔥 Хардкор: натиснеш зарано — штраф 1 сек!</div>`;
+    }
+  }
+
+  if (r.questionState === 'reading') {
+    if (state.isHost) {
+      controls += `<div style="text-align:center;">
+        <button class="btn btn-accent btn-lg" data-action="open-buzz">${icon('play',18)} Відкрити баззер для гравців</button>
+        <div style="margin-top:6px; font-size:12px; color:var(--ink-dim);">Прочитай питання вголос, потім відкрий баззер</div>
+      </div>`;
+    } else {
+      controls += `<div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:8px;">⏳ Ведучий читає питання...</div>`;
+      if (r.antiSpamConfig && !iAttempted) {
+        controls += `<button class="buzz-btn" data-action="buzz">НАТИСНИ ЩОБ ВІДПОВІСТИ</button>
+          <div style="text-align:center; font-size:12px; color:var(--accent);">🔥 Хардкор: натиснеш зарано — штраф 1 сек!</div>`;
+      }
+    }
+  }
+
+  if (buzzed) {
+    controls += `<div class="buzzed-banner">
+      <div class="buzzed-banner-label">ВІДПОВІДАЄ</div>
+      <div class="buzzed-banner-name">${buzzed.avatar} ${esc(buzzed.name)}</div>
+      ${iAmBuzzed ? `<div style="font-size:14px; margin-top:4px;">Скажи відповідь — ведучий тебе чує</div>` : ''}
+    </div>`;
+    if (state.isHost) {
+      controls += `<div class="host-controls">
+        <button class="btn btn-green btn-lg" data-action="judge" data-correct="1">${icon('check',18)} Правильно (+${q.value})</button>
+        <button class="btn btn-red btn-lg" data-action="judge" data-correct="0">${icon('x',18)} Неправильно (−${q.value})</button>
+        <button class="btn btn-ghost btn-sm" data-action="judge" data-correct="skip">Не зараховувати</button>
+      </div>`;
+    }
+  } else if (r.questionState === 'buzzing' && !state.isHost) {
+    controls += `<button class="buzz-btn" data-action="buzz" ${iAttempted?'disabled':''}>
+      ${iAttempted ? 'Ти вже відповідав' : 'НАТИСНИ ЩОБ ВІДПОВІСТИ'}
+    </button>`;
+    controls += !iAttempted
+      ? `<div style="text-align:center; font-size:12px; color:var(--ink-dim);">або натисни <b>Пробіл</b>${r.antiSpamConfig ? ' · 🔥 хардкор: 1 сек між натисканнями' : ''}</div>`
+      : `<div style="text-align:center;"><button class="btn btn-ghost btn-sm" data-action="resync">${icon('loader',12)} Базер завис? Оновити</button></div>`;
+  }
+
+  if (state.isHost && r.questionState === 'buzzing' && !buzzed) {
+    controls += `<div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:8px;">Очікуємо хто першим натисне...</div>`;
+  }
+
+  if (attempted.length > 0 && !r.revealAnswer) {
+    controls += `<div class="attempted-list">
+      ${attempted.map(pid => {
+        const p = players.find(x => x.id === pid);
+        return p ? `<span class="attempted-chip">${p.avatar} ${esc(p.name)}</span>` : '';
+      }).join('')}
+    </div>`;
+  }
+
+  if (r.revealAnswer && state.isHost) {
+    controls += `<div style="text-align:center;">
+      <button class="btn btn-gold btn-lg" data-action="back-to-board">${icon('chevronRight',18)} На дошку</button>
+    </div>`;
+  }
+
+  if (!r.revealAnswer && state.isHost && !buzzed && (r.questionState === 'buzzing' || r.questionState === 'reading' || r.questionState === 'countdown')) {
+    controls += `<div style="text-align:center;">
+      <button class="btn btn-ghost btn-sm" data-action="reveal-answer">${icon('eye',14)} ${attempted.length > 0 ? 'Показати відповідь і закрити' : 'Пропустити (ніхто не відповів)'}</button>
+    </div>`;
+  }
+
   return `
-    <div class="container-lg slide-up">
-      <div style="display:flex; justify-content:space-between; margin-bottom:16px;">
+    <div class="question-screen slide-up">
+      <div class="qs-topbar">
         <div style="font-size:13px; color:var(--ink-dim);">Кімната <b style="color:var(--gold);">${esc(state.code)}</b></div>
         ${state.isHost ? `<button class="btn btn-ghost btn-sm" data-action="close-question">${icon('x',14)} Закрити питання</button>` : ''}
       </div>
-      <div class="q-stage">
-        <div class="q-header">
+
+      <div class="qs-stage">
+        <div class="qs-stage-header">
           <div class="q-cat">${esc(cat.name)}</div>
           <div class="q-value">${q.value}</div>
         </div>
-        ${r.revealAnswer ? `
-          <div class="q-answer-reveal">
-            <div class="q-answer-reveal-label">ПРАВИЛЬНА ВІДПОВІДЬ</div>
-            ${q.answerImage ? `<img src="${q.answerImage}" class="q-image" style="max-height:55vh; margin-bottom:8px;" alt="">` : ''}
-            ${q.a && q.a.trim() ? `<div class="q-answer-reveal-text">${escMultiline(q.a)}</div>` : ''}
-            ${q.explanation && q.explanation.trim() ? `<div style="margin-top:10px; font-size:16px; font-weight:500; color:var(--green); opacity:0.85; white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
-            ${(q.q && q.q.trim()) ? `<div style="margin-top:16px; font-size:13px; color:var(--ink-dim); white-space:pre-wrap;">Питання: ${escMultiline(q.q)}</div>` : ''}
-          </div>
-        ` : `
-          <div class="q-text">
-            ${q.image ? `<img src="${q.image}" class="q-image" alt="">` : ''}
-            ${q.q && q.q.trim() ? `<div class="q-text-inner">${escMultiline(q.q)}</div>` : ''}
-          </div>
-          ${state.isHost ? `
-            <div style="margin-top:24px; padding:12px; background: rgba(74,222,128,0.08); border:1px dashed rgba(74,222,128,0.3); border-radius:12px; text-align:center;">
-              <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">ВІДПОВІДЬ (ТІЛЬКИ ТИ БАЧИШ)</div>
-              ${q.answerImage ? `<img src="${q.answerImage}" style="max-height:40vh; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
-              ${q.a && q.a.trim() ? `<div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--green); white-space:pre-wrap;">${escMultiline(q.a)}</div>` : ''}
-              ${q.explanation && q.explanation.trim() ? `<div style="margin-top:6px; font-size:14px; font-weight:500; color:var(--green); opacity:0.8; white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
-            </div>
-          ` : ''}
-        `}
+        <div class="qs-stage-body">
+          ${stageBody}
+        </div>
       </div>
 
-      <div style="margin-top:24px;">
-        ${(() => {
-          // Compute timer seconds left. Be resilient: if a deadline is
-          // momentarily missing (between state transitions), still show the bar.
-          const now = serverNow();
-          if (r.questionState === 'buzzing') {
-            const total = buzzSec(r);
-            const deadline = r.buzzPhaseDeadline || (now + total * 1000);
-            const sec = Math.max(0, Math.ceil((deadline - now) / 1000));
-            const pct = Math.min(100, (sec / total) * 100);
-            return `<div class="timer-bar" id="timer-bar">
-              <div class="timer-bar-label">⏱ Натиснути баззер: <b id="timer-sec">${sec}</b> сек</div>
-              <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--accent);"></div></div>
-            </div>`;
-          }
-          if (r.questionState === 'answering') {
-            const total = answerSec(r);
-            const deadline = r.answerPhaseDeadline || (now + total * 1000);
-            const sec = Math.max(0, Math.ceil((deadline - now) / 1000));
-            const pct = Math.min(100, (sec / total) * 100);
-            return `<div class="timer-bar" id="timer-bar">
-              <div class="timer-bar-label">⏱ Відповідь: <b id="timer-sec">${sec}</b> сек</div>
-              <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--gold);"></div></div>
-            </div>`;
-          }
-          return '';
-        })()}
-
-        ${r.questionState === 'countdown' && r.countdownDeadline ? (() => {
-          const sec = Math.max(0, Math.ceil((r.countdownDeadline - serverNow()) / 1000));
-          return `<div style="text-align:center; padding:24px 0;">
-            <div style="font-size:13px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:8px;">Базер відкриється через</div>
-            <div id="countdown-num" style="font-family:'Fraunces',serif; font-weight:900; font-size:72px; color:var(--gold); line-height:1;">${sec}</div>
-            <div style="margin-top:8px; font-size:13px; color:var(--ink-dim);">${state.isHost ? 'Читай питання вголос!' : 'Приготуйся натискати!'}</div>
-          </div>
-          ${!state.isHost && r.antiSpamConfig && !iAttempted ? `
-            <button class="buzz-btn" data-action="buzz">НАТИСНИ ЩОБ ВІДПОВІСТИ</button>
-            <div style="text-align:center; margin-top:8px; font-size:12px; color:var(--accent);">🔥 Хардкор: натиснеш зарано — отримаєш 1 сек штрафу!</div>
-          ` : ''}`;
-        })() : ''}
-
-        ${r.questionState === 'reading' ? (state.isHost ? `
-          <div style="text-align:center;">
-            <button class="btn btn-accent btn-lg" data-action="open-buzz">${icon('play',18)} Відкрити баззер для гравців</button>
-            <div style="margin-top:8px; font-size:12px; color:var(--ink-dim);">Прочитай питання вголос, потім відкрий баззер</div>
-          </div>
-        ` : `
-          <div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:16px;">
-            ⏳ Ведучий читає питання... баззер скоро відкриється
-          </div>
-          ${r.antiSpamConfig && !iAttempted ? `
-            <button class="buzz-btn" data-action="buzz">НАТИСНИ ЩОБ ВІДПОВІСТИ</button>
-            <div style="text-align:center; margin-top:8px; font-size:12px; color:var(--accent);">🔥 Хардкор: натиснеш зарано — отримаєш 1 сек штрафу!</div>
-          ` : ''}
-        `) : ''}
-
-        ${buzzed ? `
-          <div class="buzzed-banner">
-            <div class="buzzed-banner-label">ВІДПОВІДАЄ</div>
-            <div class="buzzed-banner-name">${buzzed.avatar} ${esc(buzzed.name)}</div>
-            ${iAmBuzzed ? `<div style="font-size:14px; margin-top:8px;">Скажи відповідь — ведучий тебе чує</div>` : ''}
-          </div>
-          ${state.isHost ? `
-            <div class="host-controls">
-              <button class="btn btn-green btn-lg" data-action="judge" data-correct="1">${icon('check',18)} Правильно (+${q.value})</button>
-              <button class="btn btn-red btn-lg" data-action="judge" data-correct="0">${icon('x',18)} Неправильно (−${q.value})</button>
-              <button class="btn btn-ghost btn-sm" data-action="judge" data-correct="skip">Не зараховувати</button>
-            </div>
-          ` : ''}
-        ` : (r.questionState === 'buzzing' && !state.isHost ? `
-          <button class="buzz-btn" data-action="buzz" ${iAttempted?'disabled':''}>
-            ${iAttempted ? 'Ти вже відповідав' : 'НАТИСНИ ЩОБ ВІДПОВІСТИ'}
-          </button>
-          ${!iAttempted ? `<div style="text-align:center; margin-top:8px; font-size:12px; color:var(--ink-dim);">або натисни <b>Пробіл</b> на клавіатурі${r.antiSpamConfig ? ' · 🔥 хардкор: 1 сек між натисканнями' : ''}</div>` : `<div style="text-align:center; margin-top:8px;"><button class="btn btn-ghost btn-sm" data-action="resync">${icon('loader',12)} Базер завис? Оновити</button></div>`}
-        ` : '')}
-
-        ${state.isHost && r.questionState === 'buzzing' && !buzzed ? `
-          <div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:16px;">
-            Очікуємо хто першим натисне...
-          </div>
-        ` : ''}
-
-        ${attempted.length > 0 && !r.revealAnswer ? `
-          <div class="attempted-list">
-            ${attempted.map(pid => {
-              const p = players.find(x => x.id === pid);
-              return p ? `<span class="attempted-chip">${p.avatar} ${esc(p.name)}</span>` : '';
-            }).join('')}
-          </div>
-        ` : ''}
-
-        ${r.revealAnswer && state.isHost ? `
-          <div style="text-align:center; margin-top:16px;">
-            <button class="btn btn-gold btn-lg" data-action="back-to-board">${icon('chevronRight',18)} На дошку</button>
-          </div>
-        ` : ''}
-
-        ${!r.revealAnswer && state.isHost && !buzzed && (r.questionState === 'buzzing' || r.questionState === 'reading' || r.questionState === 'countdown') ? `
-          <div style="text-align:center; margin-top:12px;">
-            <button class="btn btn-ghost btn-sm" data-action="reveal-answer">${icon('eye',14)} ${attempted.length > 0 ? 'Показати відповідь і закрити' : 'Пропустити (ніхто не відповів)'}</button>
-          </div>
-        ` : ''}
-      </div>
-
-      <div class="player-bar">
-        ${nonHostPlayers.map(p => {
-          const isBuzzed = buzzed && buzzed.id === p.id;
-          const hasAttempted = attempted.includes(p.id);
-          const isMe = p.id === state.myId;
-          let cls = 'player-chip';
-          if (isBuzzed) cls += ' current-picker';
-          if (isMe) cls += ' me';
-          if (state.isHost) cls += ' editable';
-          const clickAttr = state.isHost ? `data-action="edit-score" data-player="${p.id}"` : '';
-          return `<div class="${cls}" style="${hasAttempted && !isBuzzed ? 'opacity:0.5;' : ''}" ${clickAttr}>
-            <div class="player-chip-top">
-              <span class="player-avatar">${p.avatar}</span>
-              <div class="player-chip-name">${esc(p.name)}</div>
-            </div>
-            <div class="player-chip-score ${(p.score||0) < 0 ? 'negative' : ''}">${(p.score||0) > 0 ? '+' : ''}${p.score || 0}</div>
-          </div>`;
-        }).join('')}
+      <div class="qs-controls">
+        ${timerBar}
+        ${controls}
       </div>
     </div>
   `;
