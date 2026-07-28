@@ -87,8 +87,11 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.40';
+const APP_VERSION = '1.41';
 const CHANGELOG = [
+  { v: '1.41', date: '28.07.2026', changes: [
+    'Кнопки звуку й налаштувань у відео більше не перекриваються',
+  ]},
   { v: '1.40', date: '28.07.2026', changes: [
     'Повернуто кнопки гучності, субтитрів і повного екрану у відео з YouTube',
   ]},
