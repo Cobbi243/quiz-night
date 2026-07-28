@@ -87,8 +87,11 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.02';
+const APP_VERSION = '2.03';
 const CHANGELOG = [
+  { v: '2.03', date: '28.07.2026', changes: [
+    'Виправлено кнопку «Увімкнути відео для всіх» — тепер справді запускає',
+  ]},
   { v: '2.02', date: '28.07.2026', changes: [
     'Відео тепер справді стартує одночасно у всіх, коли ведучий вмикає',
     'Виправлено: статус аудіо оновлюється одразу, а не після натискання базера',
@@ -1813,7 +1816,7 @@ function viewQuestion(){
           <div class="yt-title-cover"></div>
           ${!state.isHost ? `<div class="yt-block" title="Керує ведучий"></div>` : ''}
           <iframe id="yt-frame" data-vid="${esc(q.youtube.id)}"
-            src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
+            src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(location.origin)}${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
             title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
         </div>
         ${state.isHost ? `
@@ -3882,21 +3885,39 @@ async function openBuzzAfterCountdown(){
 // ============== SYNCHRONISED YOUTUBE ==============
 let ytPlayer = null;
 let ytPlayerVid = null;
-let ytApiReady = false;
-window.onYouTubeIframeAPIReady = function(){ ytApiReady = true; };
+let ytReady = false;
+// The API script loads before this module, so its ready-callback may fire before
+// we could assign a handler. We therefore poll for window.YT instead of relying
+// on the callback alone.
+window.onYouTubeIframeAPIReady = function(){ /* handled by polling below */ };
 
-// Binds a YT.Player to the current iframe (recreated whenever the video changes)
 function ensureYtPlayer(){
-  if (!ytApiReady || !window.YT || !window.YT.Player) return null;
+  if (!window.YT || typeof window.YT.Player !== 'function') return null;
   const frame = document.getElementById('yt-frame');
-  if (!frame) { ytPlayer = null; ytPlayerVid = null; return null; }
+  if (!frame) { ytPlayer = null; ytPlayerVid = null; ytReady = false; return null; }
   const vid = frame.getAttribute('data-vid');
-  if (ytPlayer && ytPlayerVid === vid && ytPlayer.getIframe && ytPlayer.getIframe() === frame) return ytPlayer;
+
+  let sameFrame = false;
+  try { sameFrame = !!(ytPlayer && ytPlayer.getIframe && ytPlayer.getIframe() === frame); } catch (_) {}
+
+  if (sameFrame && ytPlayerVid === vid) {
+    return ytReady ? ytPlayer : null;   // still initialising — try again next tick
+  }
+
+  // Bind a fresh player to this iframe
   try {
-    ytPlayer = new YT.Player(frame, {});
+    ytReady = false;
     ytPlayerVid = vid;
-  } catch (_) { ytPlayer = null; }
-  return ytPlayer;
+    ytPlayer = new window.YT.Player(frame, {
+      events: {
+        onReady: () => { ytReady = true; },
+        onError: () => { ytReady = false; },
+      }
+    });
+  } catch (_) {
+    ytPlayer = null; ytPlayerVid = null; ytReady = false;
+  }
+  return null;
 }
 
 async function playVideoForAll(){
@@ -3919,17 +3940,25 @@ async function stopVideoForAll(){
 function syncVideoPlayback(){
   const r = state.room;
   if (!r) return;
-  const p = ensureYtPlayer();
-  if (!p || typeof p.playVideo !== 'function') return;
 
+  // Note the requests first — they must survive the player still loading
+  let wantStop = false;
   if (r.ytStopToken && state.lastYtStopToken !== r.ytStopToken) {
     state.lastYtStopToken = r.ytStopToken;
-    try { p.pauseVideo(); } catch (_) {}
-    return;
+    state.ytPending = false;
+    wantStop = true;
   }
   if (r.ytToken && state.lastYtToken !== r.ytToken) {
     state.lastYtToken = r.ytToken;
     state.ytPending = true;
+  }
+
+  const p = ensureYtPlayer();
+  if (!p || typeof p.playVideo !== 'function') return;  // retry next tick
+
+  if (wantStop) {
+    try { p.pauseVideo(); } catch (_) {}
+    return;
   }
   if (state.ytPending && r.ytPlayAt && serverNow() >= r.ytPlayAt) {
     state.ytPending = false;
