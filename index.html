@@ -728,11 +728,38 @@ html, body {
 .yt-wrap { position: relative; }
 .yt-wrap iframe { width: 100%; height: 100%; display: block; }
 /* Hides the video title / channel strip YouTube draws over the top of the player */
+.yt-block {
+  /* Transparent shield so players can see the video but can't control it */
+  position: absolute; inset: 0; z-index: 3;
+  background: transparent; cursor: not-allowed;
+}
 .yt-title-cover {
   /* Covers only the title text on the left — leaves YouTube's own buttons
      (mute, settings, subtitles) on the right visible and clickable. */
   position: absolute; top: 0; left: 0; right: 150px; height: 46px;
   background: #000; z-index: 2; pointer-events: none;
+}
+
+/* Volume control shown to players on audio questions */
+.vol-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 12px; justify-content: center;
+}
+.vol-slider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; max-width: 220px; height: 5px;
+  border-radius: 999px; background: var(--line);
+  outline: none; cursor: pointer;
+}
+.vol-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--gold); cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+.vol-slider::-moz-range-thumb {
+  width: 16px; height: 16px; border: none; border-radius: 50%;
+  background: var(--gold); cursor: pointer;
 }
 
 /* Audio question player */
@@ -780,6 +807,6 @@ html, body {
     <div style="margin-top:16px; color:var(--ink-dim);">Завантаження...</div>
   </div>
 </div>
-<script type="module" src="app.js?v=202607280800"></script>
+<script type="module" src="app.js?v=202607280815"></script>
 </body>
 </html>

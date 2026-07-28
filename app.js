@@ -87,8 +87,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.0';
+const APP_VERSION = '2.01';
 const CHANGELOG = [
+  { v: '2.01', date: '28.07.2026', changes: [
+    'Відео з YouTube тепер вмикає лише ведучий — гравці не можуть запустити',
+    'Гравцям додано регулятор гучності для аудіопитань',
+  ]},
   { v: '2.0', date: '28.07.2026', changes: [
     '━━━ НОВІ МОЖЛИВОСТІ ━━━',
     '👥 Командний режим — 2-4 команди зі спільними балами. Ведучий розкидає гравців у лоббі (можна випадково одним кліком). Кожен баззить сам, але бали йдуть команді; якщо хтось помилився — вся команда пропускає питання. Фінал і таблиця результатів теж командні.',
@@ -325,6 +329,7 @@ let state = {
   lastAudioStopToken: null,
   audioPending: false,  // waiting for the scheduled start moment
   audioBlocked: false,  // browser refused autoplay
+  audioVolume: 1,       // player-side volume for audio questions
   authReady: false,
   err: '',
   loading: false,
@@ -1795,11 +1800,12 @@ function viewQuestion(){
       ${q.youtube && q.youtube.id ? `
         <div class="yt-wrap">
           <div class="yt-title-cover"></div>
+          ${!state.isHost ? `<div class="yt-block" title="Керує ведучий"></div>` : ''}
           <iframe
             src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
             title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
         </div>
-        ${state.isHost ? `<div style="font-size:12px; color:var(--ink-dim);">Натисни ▶ і поділись звуком/екраном щоб усі бачили</div>` : ''}
+        <div style="font-size:12px; color:var(--ink-dim);">${state.isHost ? 'Натисни ▶ і поділись звуком/екраном щоб усі бачили' : '🎬 Відео вмикає ведучий'}</div>
       ` : ''}
       ${q.video ? `
         <div class="yt-wrap">
@@ -1824,6 +1830,11 @@ function viewQuestion(){
             ` : `
               <div style="font-size:14px; color:${r.audioPlaying ? 'var(--green)' : 'var(--ink-dim)'};">
                 ${r.audioPlaying ? '▶ грає...' : '⏳ чекаємо на ведучого'}
+              </div>
+              <div class="vol-row">
+                <span style="font-size:14px;">🔈</span>
+                <input type="range" id="q-audio-vol" class="vol-slider" min="0" max="100" value="${Math.round((state.audioVolume ?? 1) * 100)}">
+                <span style="font-size:14px;">🔊</span>
               </div>
             `}
           `}
@@ -2999,6 +3010,20 @@ function attachListeners(){
       }
     });
   }
+
+  // Player-side volume control for audio questions
+  const volEl = document.getElementById('q-audio-vol');
+  if (volEl) {
+    volEl.addEventListener('input', e => {
+      const v = Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)) / 100;
+      state.audioVolume = v;
+      const a = document.getElementById('q-audio');
+      if (a) a.volume = v;
+    });
+  }
+  // Keep the audio element in sync with the chosen volume after re-renders
+  const aEl = document.getElementById('q-audio');
+  if (aEl) aEl.volume = (state.audioVolume ?? 1);
 
   // Video attach input
   const videoIn = document.getElementById('video-input');
