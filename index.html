@@ -736,6 +736,14 @@ html, body {
 .yt-shade-top { top: 0; height: 56px; }
 .yt-shade-bottom { bottom: 0; height: 48px; }
 
+.yt-poster-cover {
+  /* Masks the video thumbnail so players can't guess from the preview frame */
+  position: absolute; inset: 0; z-index: 4;
+  background: #000; color: var(--ink-dim);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; pointer-events: none;
+}
+
 .yt-block {
   /* Transparent shield so players can see the video but can't control it */
   position: absolute; inset: 0; z-index: 3;
@@ -826,6 +834,6 @@ html, body {
   </div>
 </div>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script type="module" src="app.js?v=202607280930"></script>
+<script type="module" src="app.js?v=202607280950"></script>
 </body>
 </html>

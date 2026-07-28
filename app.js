@@ -87,8 +87,17 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.06';
+const APP_VERSION = '2.07';
 const CHANGELOG = [
+  { v: '2.07', date: '28.07.2026', changes: [
+    'Прибрано блимання під час питання — екран більше не перемальовується повністю',
+    'Відео й аудіо більше не переривається коли хтось натискає базер',
+    'Своє відео тепер теж запускається одночасно у всіх',
+    'Перший гравець обирається випадково, а не завжди один і той самий',
+    'Гравці не бачать превʼю відео — тільки чорний екран до запуску',
+    'На клітинках зʼявились іконки аудіо 🔊 і відео 🎬',
+    'Кнопка базера більше не зʼявляється під час відліку',
+  ]},
   { v: '2.06', date: '28.07.2026', changes: [
     'У статистику додано середні бали за кожен раунд окремо',
     'Додано точність вгаданих фінальних питань',
@@ -1130,6 +1139,27 @@ function render(force){
     html += viewChatWidget();
   }
 
+  // While a question is on screen, avoid rebuilding the whole DOM when only the
+  // controls change (buzzer, judging, timers). A full rewrite would restart any
+  // playing audio/video and cause a visible flicker.
+  const liveScreen = appEl.querySelector('.question-screen');
+  if (liveScreen && html.indexOf('class="question-screen') !== -1) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    const nextScreen = tmp.querySelector('.question-screen');
+    if (nextScreen && nextScreen.getAttribute('data-stage-key') === liveScreen.getAttribute('data-stage-key')) {
+      const swap = (sel) => {
+        const a = liveScreen.querySelector(sel), b = nextScreen.querySelector(sel);
+        if (a && b && a.innerHTML !== b.innerHTML) a.innerHTML = b.innerHTML;
+      };
+      swap('.qs-controls');
+      swap('.qs-topbar');
+      // Overlays (chat, modals, badges) live outside the question screen
+      attachListeners();
+      return;
+    }
+  }
+
   appEl.innerHTML = html;
   attachListeners();
 
@@ -1750,7 +1780,9 @@ function viewBoard(){
               const cellValue = q?.value || VALUES[vi];
               // Show a small photo icon on cells whose question or answer has an image
               const hasImg = q && (q.image || q.answerImage);
-              return `<button class="board-cell ${used?'used':''}" ${(used||!canPick)?'disabled':''} data-action="pick-cell" data-ci="${ci}" data-qi="${vi}">${used ? '' : cellValue}${hasImg && !used ? `<span class="cell-img-icon" title="Питання/відповідь з картинкою">${icon('image',12)}</span>` : ''}</button>`;
+              const hasAud = q && q.audio;
+              const hasVid = q && (q.video || q.youtube);
+              return `<button class="board-cell ${used?'used':''}" ${(used||!canPick)?'disabled':''} data-action="pick-cell" data-ci="${ci}" data-qi="${vi}">${used ? '' : cellValue}${!used && (hasImg || hasAud || hasVid) ? `<span class="cell-img-icon">${hasImg ? icon('image',12) : ''}${hasAud ? '🔊' : ''}${hasVid ? '🎬' : ''}</span>` : ''}</button>`;
             }).join('')
           ).join('')}
         </div>
@@ -1851,6 +1883,7 @@ function viewQuestion(){
           ${state.isHost ? `<div class="yt-title-cover"></div>` : `
             <div class="yt-shade-top"></div>
             <div class="yt-shade-bottom"></div>
+            ${!r.ytPlaying ? `<div class="yt-poster-cover">🎬 Відео вмикає ведучий</div>` : ''}
             <div class="yt-block" title="Керує ведучий"></div>
           `}
           <iframe id="yt-frame" data-vid="${esc(q.youtube.id)}"
@@ -1875,8 +1908,18 @@ function viewQuestion(){
       ${q.video ? `
         <div class="yt-wrap">
           <video id="q-video" src="${q.video}" ${state.isHost ? 'controls' : ''} playsinline preload="auto" style="width:100%; height:100%; object-fit:contain; background:#000;"></video>
+          ${!state.isHost && !r.ytPlaying ? `<div class="yt-poster-cover">🎬 Відео вмикає ведучий</div>` : ''}
         </div>
-        ${state.isHost ? `<div style="font-size:12px; color:var(--ink-dim);">Показуй на спільному екрані</div>` : ''}
+        ${state.isHost ? `
+          <div style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap;">
+            <button class="btn btn-accent btn-sm" data-action="play-video-all">${icon('play',14)} Увімкнути для всіх</button>
+            <button class="btn btn-ghost btn-sm" data-action="stop-video-all">⏹ Зупинити</button>
+          </div>
+        ` : `
+          <div style="font-size:13px; color:${r.ytPlaying ? 'var(--green)' : 'var(--ink-dim)'}; margin-top:8px;">
+            ${r.ytPlaying ? '▶ грає...' : '🎬 відео вмикає ведучий'}
+          </div>
+        `}
       ` : ''}
       ${q.audio ? `
         <div class="audio-player">
@@ -1991,8 +2034,7 @@ function viewQuestion(){
       <div style="margin-top:4px; font-size:13px; color:var(--ink-dim);">${state.isHost ? 'Читай питання вголос!' : 'Приготуйся натискати!'}</div>
     </div>`;
     if (!state.isHost && r.antiSpamConfig && !iAttempted) {
-      controls += `<button class="buzz-btn" data-action="buzz">НАТИСНИ ЩОБ ВІДПОВІСТИ</button>
-        <div style="text-align:center; font-size:12px; color:var(--accent);">🔥 Хардкор: натиснеш зарано — штраф 1 сек!</div>`;
+      controls += `<div style="text-align:center; font-size:12px; color:var(--accent);">🔥 Хардкор: натиснеш пробіл зарано — штраф 1 сек!</div>`;
     }
   }
 
@@ -2005,8 +2047,7 @@ function viewQuestion(){
     } else {
       controls += `<div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:8px;">⏳ Ведучий читає питання...</div>`;
       if (r.antiSpamConfig && !iAttempted) {
-        controls += `<button class="buzz-btn" data-action="buzz">НАТИСНИ ЩОБ ВІДПОВІСТИ</button>
-          <div style="text-align:center; font-size:12px; color:var(--accent);">🔥 Хардкор: натиснеш зарано — штраф 1 сек!</div>`;
+        controls += `<div style="text-align:center; font-size:12px; color:var(--accent);">🔥 Хардкор: натиснеш пробіл зарано — штраф 1 сек!</div>`;
       }
     }
   }
@@ -2059,8 +2100,15 @@ function viewQuestion(){
     </div>`;
   }
 
+  const stageKey = [
+    r.currentCell.ci, r.currentCell.qi,
+    r.revealAnswer ? 'ans' : 'q',
+    r.questionState === 'dd_bid' ? 'ddbid' : '',
+    state.isHost ? 'h' : 'p',
+  ].join('|');
+
   return `
-    <div class="question-screen slide-up">
+    <div class="question-screen slide-up" data-stage-key="${stageKey}">
       <div class="qs-topbar">
         <div style="font-size:13px; color:var(--ink-dim);">Кімната <b style="color:var(--gold);">${esc(state.code)}</b></div>
         ${state.isHost ? `<button class="btn btn-ghost btn-sm" data-action="close-question">${icon('x',14)} Закрити питання</button>` : ''}
@@ -3842,7 +3890,7 @@ async function startGame(pack){
   const nonHost = playerList.filter(p => p.id !== r.hostId);
   let firstPicker;
   if (isFirstRound) {
-    firstPicker = nonHost[0];
+    firstPicker = nonHost[Math.floor(Math.random() * nonHost.length)];
   } else {
     // After round 1: lowest scorer picks first (Jeopardy tradition)
     firstPicker = [...nonHost].sort((a,b)=>(a.score||0)-(b.score||0))[0];
@@ -4063,6 +4111,21 @@ function syncVideoPlayback(){
   if (r.ytToken && state.lastYtToken !== r.ytToken) {
     state.lastYtToken = r.ytToken;
     state.ytPending = true;
+  }
+
+  // Uploaded video file (not YouTube) — same play/stop requests apply
+  const vEl = document.getElementById('q-video');
+  if (vEl) {
+    if (wantStop) { try { vEl.pause(); } catch (_) {} }
+    else if (state.ytPending && r.ytPlayAt && serverNow() >= r.ytPlayAt) {
+      state.ytPending = false;
+      try {
+        vEl.currentTime = 0;
+        const pr = vEl.play();
+        if (pr && pr.catch) pr.catch(() => { state.ytBlocked = true; render(true); });
+      } catch (_) { state.ytBlocked = true; }
+    }
+    return;
   }
 
   const p = ensureYtPlayer();
