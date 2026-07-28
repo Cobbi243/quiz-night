@@ -36,9 +36,83 @@ const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
 const FINAL_MIN_BID_CAP = 1000; // players with <=0 score can still bid up to this
 
+// Team presets (used when team mode is on)
+const TEAM_PRESETS = [
+  { id: 1, name: 'Червоні',  color: '#e84a30', emoji: '🔴' },
+  { id: 2, name: 'Сині',     color: '#3b82f6', emoji: '🔵' },
+  { id: 3, name: 'Зелені',   color: '#4ade80', emoji: '🟢' },
+  { id: 4, name: 'Жовті',    color: '#f0b429', emoji: '🟡' },
+];
+function teamsOf(r){
+  const n = (r && r.teamCountConfig) || 0;
+  return TEAM_PRESETS.slice(0, n);
+}
+function isTeamMode(r){ return !!(r && r.teamModeConfig); }
+// All players belonging to a team
+function playersOfTeam(r, teamId){
+  return getPlayerList(r).filter(p => p.id !== r.hostId && p.teamId === teamId);
+}
+// A team's score = stored on the team record
+function teamScore(r, teamId){
+  return (r.teamScores && r.teamScores[teamId]) || 0;
+}
+
+// ---- Final-round "entities": in team mode a team plays the final, otherwise a player ----
+// Key used inside finalBids / finalJudgement / finalBaseScores
+function myFinalKey(r){
+  if (!isTeamMode(r)) return state.myId;
+  const t = r.players?.[state.myId]?.teamId;
+  return t ? `t${t}` : null;
+}
+// Current score for a final entity key
+function finalEntityScore(r, key){
+  if (typeof key === 'string' && key.startsWith('t')) return teamScore(r, parseInt(key.slice(1), 10));
+  return r.players?.[key]?.score || 0;
+}
+// Display info for a final entity key
+function finalEntityInfo(r, key){
+  if (typeof key === 'string' && key.startsWith('t')) {
+    const id = parseInt(key.slice(1), 10);
+    const t = TEAM_PRESETS.find(x => x.id === id);
+    const members = playersOfTeam(r, id);
+    return { name: t ? t.name : `Команда ${id}`, avatar: t ? t.emoji : '👥', color: t ? t.color : 'var(--gold)', members };
+  }
+  const p = r.players?.[key];
+  return { name: p?.name || '?', avatar: p?.avatar || '👤', color: 'var(--gold)', members: [] };
+}
+// All entity keys that take part in the final
+function finalEntityKeys(r){
+  if (isTeamMode(r)) return teamsOf(r).filter(t => playersOfTeam(r, t.id).length > 0).map(t => `t${t.id}`);
+  return getPlayerList(r).filter(p => p.id !== r.hostId).map(p => p.id);
+}
+
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.28';
+const APP_VERSION = '2.0';
 const CHANGELOG = [
+  { v: '2.0', date: '28.07.2026', changes: [
+    '━━━ НОВІ МОЖЛИВОСТІ ━━━',
+    '👥 Командний режим — 2-4 команди зі спільними балами. Ведучий розкидає гравців у лоббі (можна випадково одним кліком). Кожен баззить сам, але бали йдуть команді; якщо хтось помилився — вся команда пропускає питання. Фінал і таблиця результатів теж командні.',
+    '🎲 «Своя гра» — приховані клітинки зі ставкою. Хто відкрив, ставить свої бали і відповідає сам, без базера. Питання показується лише після ставки.',
+    '🏆 Статистика і 20 досягнень — перемоги, точність, рекорд, базери. Плюс окремі 8 досягнень для ведучого: проведені ігри, задані питання, аншлаг.',
+    '🔊 Аудіопитання — прикріпи свій запис до будь-якого питання. Ведучий вмикає, і звук стартує одночасно на всіх пристроях.',
+    '🎬 Відео — вставка з YouTube через [yt:посилання 15-45] або короткий файл зі свого пристрою.',
+    '🎯 Автовідлік базера — від 1 до 10 секунд, видно всім.',
+    '🔥 Хардкор-режим базера — 1 секунда кулдауну, щоб не спамили кнопку.',
+    '━━━ ІНТЕРФЕЙС ━━━',
+    '📱 Екран питання більше не скролиться: текст сам зменшується, базер завжди знизу на видноті.',
+    '✨ Оновлена дошка — обʼємні клітинки з підсвіткою, тепле фонове сяйво, пульсуючий базер.',
+    '🏠 Новий стартовий екран.',
+    '📝 Переліки в стовпчик у питаннях і пояснення до відповіді через //.',
+    '🖼 Більші й чіткіші картинки, іконка на клітинках де є медіа.',
+    '━━━ ВИПРАВЛЕННЯ ━━━',
+    'Питання більше не відкриває відповідь саме по собі й не «оживає» на дошці.',
+    'Базер працює навіть якщо на пристрої збитий годинник — таймери звірені з сервером.',
+    'При одночасному натисканні одразу видно того хто справді був першим.',
+    'Екран не блимає коли ведучий роздає бали, курсор не злітає з поля вводу.',
+    'У фіналі бали списуються навіть якщо є ставка, але нема відповіді.',
+    'Гравець з нулем балів теж може зробити ставку у фіналі.',
+    'Довгий текст питання більше не обрізається зверху.',
+  ]},
   { v: '1.28', date: '27.07.2026', changes: [
     'Базер: тепер одразу показує того хто справді натиснув першим (без миготіння чужого імені)',
     'Курсор більше не злітає з поля коли хтось інший оновлює бали',
@@ -239,6 +313,18 @@ let state = {
   myId: null,
   isHost: false,
   serverTimeOffset: 0,  // ms difference between server clock and this device
+  clockSynced: false,   // true once we've received the server offset
+  savedGameId: null,    // guards against saving the same game twice
+  newAchievements: null,// ids unlocked in the game just finished
+  myProfile: null,      // cached stats profile
+  myHostProfile: null,  // cached host stats
+  showStats: false,     // stats screen open
+  audioTarget: null,    // {ci,qi} awaiting an audio file
+  videoTarget: null,    // {ci,qi} awaiting a video file
+  lastAudioToken: null, // last synced play token
+  lastAudioStopToken: null,
+  audioPending: false,  // waiting for the scheduled start moment
+  audioBlocked: false,  // browser refused autoplay
   authReady: false,
   err: '',
   loading: false,
@@ -270,6 +356,11 @@ let state = {
   setupBuzzMode: 'instant',  // 'instant' | 'manual' | 'countdown'
   setupCountdownSeconds: 5,  // for countdown mode
   setupAntiSpam: false,      // hardcore: 1s cooldown between buzz attempts
+  setupTeamMode: false,      // play in teams instead of individuals
+  setupTeamCount: 2,         // 2-4 teams
+  setupDailyDouble: false,   // hidden "your bet" cells
+  setupDDCount: 1,           // how many per round
+  ddBidLocal: 0,             // local bet input for daily double
   setupFinalQ: { category:'', q:'', a:'' },
   finalBidLocal: 0,
   finalAnswerLocal: '',
@@ -370,6 +461,9 @@ async function savePack(name, pack){
         explanation: q.explanation || null,
         image: q.image || null,
         answerImage: q.answerImage || null,
+        audio: q.audio || null,
+        video: q.video || null,
+        youtube: q.youtube || null,
       }))
     }))
   };
@@ -493,11 +587,14 @@ async function parseTextToPack(text){
           answerText = rawAnswer.slice(0, slashIdx).trim();
           explanation = rawAnswer.slice(slashIdx + 2).trim();
         }
+        const rawQ = unescapeBreaks(parts[1].trim());
+        const ex = extractYouTube(rawQ);
         const qObj = {
           value,
-          q: unescapeBreaks(parts[1].trim()),
+          q: ex.clean,
           a: unescapeBreaks(answerText)
         };
+        if (ex.yt) qObj.youtube = ex.yt;
         if (explanation) qObj.explanation = unescapeBreaks(explanation);
         cur.questions.push(qObj);
       }
@@ -508,6 +605,27 @@ async function parseTextToPack(text){
   return result;
 }
 
+
+// Extracts a [yt:ID 15-45] marker from text. Accepts a raw video id or a full
+// YouTube URL, with optional start-end seconds. Returns {clean, yt}.
+function extractYouTube(text){
+  if (!text) return { clean: text, yt: null };
+  const re = /\[yt:\s*([^\]\s]+)(?:\s+(\d+)\s*-\s*(\d+))?\s*\]/i;
+  const m = text.match(re);
+  if (!m) return { clean: text, yt: null };
+  let raw = m[1];
+  let id = raw;
+  // Pull the id out of common URL shapes
+  const urlMatch = raw.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([A-Za-z0-9_-]{6,})/);
+  if (urlMatch) id = urlMatch[1];
+  id = id.replace(/[^A-Za-z0-9_-]/g, '');
+  const yt = { id };
+  if (m[2]) yt.start = parseInt(m[2], 10);
+  if (m[3]) yt.end = parseInt(m[3], 10);
+  const clean = text.replace(re, '').replace(/\s{2,}/g, ' ').trim();
+  return { clean, yt };
+}
+
 function normalizeCategory(cat){
   // Sort questions by value, fill missing with standard VALUES
   const sorted = (cat.questions||[]).sort((a,b)=>a.value-b.value);
@@ -516,9 +634,9 @@ function normalizeCategory(cat){
     const v = VALUES[i];
     const found = sorted.find(q => q.value === v) || sorted[i];
     if (found) {
-      questions.push({ value: v, q: found.q, a: found.a, explanation: found.explanation || null, image: found.image, answerImage: found.answerImage });
+      questions.push({ value: v, q: found.q, a: found.a, explanation: found.explanation || null, image: found.image, answerImage: found.answerImage, audio: found.audio || null, video: found.video || null, youtube: found.youtube || null });
     } else {
-      questions.push({ value: v, q: '', a: '', explanation: null, image: null, answerImage: null });
+      questions.push({ value: v, q: '', a: '', explanation: null, image: null, answerImage: null, audio: null, video: null, youtube: null });
     }
   }
   return { name: cat.name, questions };
@@ -843,16 +961,26 @@ function computeHash(){
     setupAnswerSeconds: state.setupAnswerSeconds,
     setupBuzzMode: state.setupBuzzMode,
     setupAntiSpam: state.setupAntiSpam,
+    setupTeamMode: state.setupTeamMode,
+    setupTeamCount: state.setupTeamCount,
+    setupDailyDouble: state.setupDailyDouble,
+    setupDDCount: state.setupDDCount,
+    ddBidLocal: state.ddBidLocal,
     setupCountdownSeconds: state.setupCountdownSeconds,
     setupFinalQ: state.setupFinalQ,
     editingScorePlayerId: state.editingScorePlayerId,
     showFormatHelp: state.showFormatHelp,
     showChangelog: state.showChangelog,
+    showStats: state.showStats,
+    newAchievements: (state.newAchievements||[]).join(','),
+    profileGames: state.myProfile?.games || 0,
     chatOpen: state.chatOpen,
     chatCount: r && r.chat ? Object.keys(r.chat).length : 0,
     room: r ? {
       status: r.status, hostId: r.hostId,
       players: r.players, currentCell: r.currentCell,
+      teamModeConfig: r.teamModeConfig, teamCountConfig: r.teamCountConfig, teamScores: r.teamScores,
+      dailyDoubles: r.dailyDoubles, ddPlayer: r.ddPlayer, ddBid: r.ddBid, ddBidSubmitted: r.ddBidSubmitted,
       buzzedPlayer: r.buzzedPlayer, attemptedBy: r.attemptedBy,
       questionState: r.questionState, currentPicker: r.currentPicker,
       usedCells: r.usedCells, revealAnswer: r.revealAnswer,
@@ -932,6 +1060,12 @@ function render(force){
   if (state.editingScorePlayerId && state.isHost && state.room && state.room.players) {
     html += viewScoreEditModal();
   }
+  if (state.showStats) {
+    appEl.innerHTML = viewStats();
+    attachListeners();
+    return;
+  }
+
   // Overlay: format help modal
   if (state.showFormatHelp) {
     html += viewFormatHelpModal();
@@ -942,6 +1076,9 @@ function render(force){
   }
   // Always-present version badge (top-right)
   html += `<button class="version-badge" data-action="show-changelog" title="Що нового">v${APP_VERSION}</button>`;
+  // Always-present hidden input used for attaching audio to questions
+  html += `<input type="file" id="audio-input" accept="audio/*" style="display:none;">`;
+  html += `<input type="file" id="video-input" accept="video/*" style="display:none;">`;
   // Chat widget — visible whenever inside a room
   if (state.room && state.code) {
     html += viewChatWidget();
@@ -984,20 +1121,38 @@ function viewSetupNeeded(){
 }
 
 function viewHome(){
+  const features = [
+    { e: '👥', t: 'Команди' },
+    { e: '🎲', t: 'Своя гра' },
+    { e: '🔊', t: 'Аудіо' },
+    { e: '🎬', t: 'Відео' },
+    { e: '🏆', t: 'Досягнення' },
+    { e: '💬', t: 'Чат' },
+  ];
   return `
-    <div class="center-screen slide-up">
-      <div style="text-align:center; margin-bottom: 48px;">
+    <div class="home-screen slide-up">
+      <div class="home-glow"></div>
+
+      <div class="home-hero">
         <div class="eyebrow">QUIZ NIGHT • ОНЛАЙН</div>
         <h1 class="hero-title">Своя<br><em>Гра</em></h1>
-        <p class="hero-sub">Квіз для компанії у форматі Jeopardy. Дошка 6×5, до 3 раундів + фінал зі ставками. Хто перший натиснув — той відповідає.</p>
+        <p class="hero-sub">Квіз для компанії у форматі Jeopardy.<br>Дошка 6×5, до 3 раундів і фінал зі ставками.</p>
       </div>
-      <div class="options-row">
-        <button class="btn btn-accent btn-lg" style="flex:1" data-action="go-host">${icon('plus',20)} Створити кімнату</button>
-        <button class="btn btn-ghost btn-lg" style="flex:1" data-action="go-join">${icon('users',20)} Долучитися</button>
+
+      <div class="home-actions">
+        <button class="btn btn-accent btn-lg home-cta" data-action="go-host">${icon('plus',20)} Створити кімнату</button>
+        <button class="btn btn-ghost btn-lg home-cta" data-action="go-join">${icon('users',20)} Долучитися</button>
       </div>
-      <button class="btn btn-ghost btn-sm" data-action="show-format-help" style="margin-top:16px; background:transparent; border:none; color:var(--ink-dim);">
-        ${icon('eye',14)} Як зробити свій пак з питаннями?
-      </button>
+
+      <div class="feature-pills">
+        ${features.map(f => `<span class="feature-pill"><span>${f.e}</span>${f.t}</span>`).join('')}
+      </div>
+
+      <div class="home-links">
+        <button class="link-btn" data-action="open-stats">${icon('trophy',14)} Статистика і досягнення</button>
+        <span class="home-links-sep">·</span>
+        <button class="link-btn" data-action="show-format-help">${icon('eye',14)} Як зробити свій пак</button>
+      </div>
     </div>
   `;
 }
@@ -1068,19 +1223,35 @@ function viewLobby(){
           <h3 style="font-family:'Fraunces',serif; font-size:24px; font-weight:700;">Гравці</h3>
           <div style="font-size:14px; color:var(--ink-dim);">${playerList.length}</div>
         </div>
+        ${isTeamMode(r) && state.isHost ? `
+          <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap;">
+            <span style="font-size:12px; color:var(--ink-dim);">Клікай по значку команди щоб змінити:</span>
+            <button class="btn btn-ghost btn-sm" data-action="auto-assign-teams">🎲 Розкидати випадково</button>
+          </div>
+        ` : ''}
         <div class="players-grid">
-          ${playerList.map(p => `
-            <div class="player-card ${p.id===state.myId?'me':''}">
+          ${playerList.map(p => {
+            const isHostRow = p.id === r.hostId;
+            const t = TEAM_PRESETS.find(x => x.id === p.teamId);
+            const nextTeam = isTeamMode(r) ? ((p.teamId || 0) % (r.teamCountConfig || 2)) + 1 : null;
+            return `
+            <div class="player-card ${p.id===state.myId?'me':''}" ${t ? `style="border-left:3px solid ${t.color};"` : ''}>
               <span class="player-avatar">${p.avatar}</span>
               <div class="player-name">
                 <span class="name-text">${esc(p.name)}</span>
-                ${p.id === r.hostId ? `<span style="color:var(--gold); flex-shrink:0;">${icon('crown',12)}</span>` : ''}
+                ${isHostRow ? `<span style="color:var(--gold); flex-shrink:0;">${icon('crown',12)}</span>` : ''}
               </div>
-              ${state.isHost && p.id !== r.hostId && p.id !== state.myId ? `
+              ${isTeamMode(r) && !isHostRow ? (state.isHost ? `
+                <button class="btn btn-ghost btn-sm" data-action="assign-team" data-player="${p.id}" data-team="${nextTeam}"
+                  style="padding:3px 8px; ${t ? `color:${t.color}; border-color:${t.color}55;` : ''}" title="Змінити команду">
+                  ${t ? `${t.emoji} ${esc(t.name)}` : '➕ Команда'}
+                </button>
+              ` : (t ? `<span style="font-size:12px; color:${t.color}; font-weight:600;">${t.emoji} ${esc(t.name)}</span>` : `<span style="font-size:12px; color:var(--ink-faint);">без команди</span>`)) : ''}
+              ${state.isHost && !isHostRow && p.id !== state.myId ? `
                 <button class="kick-btn" data-action="kick-player" data-player="${p.id}" title="Видалити гравця">${icon('x',14)}</button>
               ` : ''}
-            </div>
-          `).join('')}
+            </div>`;
+          }).join('')}
         </div>
       </div>
       ${state.isHost ? `
@@ -1175,6 +1346,28 @@ function viewModeSelect(){
             <button class="timer-chip ${!state.setupAntiSpam ? 'active' : ''}" data-action="set-anti-spam" data-anti="0" style="text-align:left;">😎 Звичайний — хто перший натиснув, той відповідає</button>
             <button class="timer-chip ${state.setupAntiSpam ? 'active' : ''}" data-action="set-anti-spam" data-anti="1" style="text-align:left;">🔥 Хардкор — 1 сек кулдаун між натисканнями (антиспам)</button>
           </div>
+
+          <div style="font-size:13px; color:var(--ink-dim); margin-top:16px; margin-bottom:8px;">👥 ХТО ГРАЄ</div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <button class="timer-chip ${!state.setupTeamMode ? 'active' : ''}" data-action="set-team-mode" data-team="0" style="text-align:left;">🙋 Кожен сам за себе</button>
+            <button class="timer-chip ${state.setupTeamMode ? 'active' : ''}" data-action="set-team-mode" data-team="1" style="text-align:left;">👥 Командами — бали спільні</button>
+          </div>
+          ${state.setupTeamMode ? `
+            <div style="font-size:13px; color:var(--ink-dim); margin-top:12px; margin-bottom:8px;">Скільки команд:</div>
+            <div class="timer-chip-row">${[2,3,4].map(n => `<button class="timer-chip ${state.setupTeamCount===n?'active':''}" data-action="set-team-count" data-count="${n}">${n}</button>`).join('')}</div>
+            <div class="info-text" style="margin-top:10px;">Гравців по командах розкидаєш у лоббі перед стартом.</div>
+          ` : ''}
+
+          <div style="font-size:13px; color:var(--ink-dim); margin-top:16px; margin-bottom:8px;">🎲 СВОЯ ГРА (DAILY DOUBLE)</div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <button class="timer-chip ${!state.setupDailyDouble ? 'active' : ''}" data-action="set-dd" data-dd="0" style="text-align:left;">Вимкнено</button>
+            <button class="timer-chip ${state.setupDailyDouble ? 'active' : ''}" data-action="set-dd" data-dd="1" style="text-align:left;">🎲 Увімкнено — приховані клітинки зі ставкою</button>
+          </div>
+          ${state.setupDailyDouble ? `
+            <div style="font-size:13px; color:var(--ink-dim); margin-top:12px; margin-bottom:8px;">Скільки на раунд:</div>
+            <div class="timer-chip-row">${[1,2].map(n => `<button class="timer-chip ${state.setupDDCount===n?'active':''}" data-action="set-dd-count" data-count="${n}">${n}</button>`).join('')}</div>
+            <div class="info-text" style="margin-top:10px;">Хто відкриє таку клітинку — ставить свої бали і відповідає сам, без базера.</div>
+          ` : ''}
         </div>
 
         ${state.setupErr ? `<div class="err-text" style="margin-bottom:12px;">${esc(state.setupErr)}</div>` : ''}
@@ -1305,10 +1498,10 @@ function viewSetupFile(){
     ` : `
       <div class="card parsed-preview" style="margin-bottom:16px;">
         <div style="font-size:14px; color:var(--ink-dim); margin-bottom:12px;">Знайдено: ${p.categories.length} категорій</div>
-        ${p.categories.map(c => `
+        ${p.categories.map((c, ci) => `
           <div class="parsed-cat">
             <div class="parsed-cat-name">${esc(c.name||'Без назви')}</div>
-            ${c.questions.map(q => {
+            ${c.questions.map((q, qi) => {
               const hasText = q.q && q.q.trim();
               const hasImage = !!q.image;
               let qDisplay;
@@ -1327,6 +1520,21 @@ function viewSetupFile(){
                 <div class="parsed-q">
                   <div><span class="v">${q.value}</span> · ${qDisplay}${imgIcon}</div>
                   <div class="a">✓ ${aDisplay}${ansImgIcon}</div>
+                  <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+                    ${q.youtube && q.youtube.id ? `<span style="font-size:12px; color:var(--gold);">🎬 відео</span>` : ''}
+                    ${q.audio ? `
+                      <span style="font-size:12px; color:var(--green);">🔊 аудіо</span>
+                      <button class="btn btn-ghost btn-sm" data-action="remove-audio" data-ci="${ci}" data-qi="${qi}" style="padding:2px 8px; font-size:11px;">прибрати</button>
+                    ` : `
+                      <button class="btn btn-ghost btn-sm" data-action="attach-audio" data-ci="${ci}" data-qi="${qi}" style="padding:2px 8px; font-size:11px; color:var(--ink-dim);">🔊 аудіо</button>
+                    `}
+                    ${q.video ? `
+                      <span style="font-size:12px; color:var(--green);">🎥 відео</span>
+                      <button class="btn btn-ghost btn-sm" data-action="remove-video" data-ci="${ci}" data-qi="${qi}" style="padding:2px 8px; font-size:11px;">прибрати</button>
+                    ` : `
+                      <button class="btn btn-ghost btn-sm" data-action="attach-video" data-ci="${ci}" data-qi="${qi}" style="padding:2px 8px; font-size:11px; color:var(--ink-dim);">🎥 відео</button>
+                    `}
+                  </div>
                 </div>
               `;
             }).join('')}
@@ -1493,24 +1701,48 @@ function viewBoard(){
           ).join('')}
         </div>
       </div>
-      <div class="player-bar">
-        ${nonHostPlayers.map(p => {
-          const isPicker = p.id === r.currentPicker;
-          const isMe = p.id === state.myId;
-          let cls = 'player-chip';
-          if (isPicker) cls += ' current-picker';
-          if (isMe) cls += ' me';
-          if (state.isHost) cls += ' editable';
-          const clickAttr = state.isHost ? `data-action="edit-score" data-player="${p.id}"` : '';
-          return `<div class="${cls}" ${clickAttr}>
-            <div class="player-chip-top">
-              <span class="player-avatar">${p.avatar}</span>
-              <div class="player-chip-name">${esc(p.name)}</div>
-            </div>
-            <div class="player-chip-score ${(p.score||0) < 0 ? 'negative' : ''}">${(p.score||0) > 0 ? '+' : ''}${p.score || 0}</div>
-          </div>`;
-        }).join('')}
-      </div>
+      ${isTeamMode(r) ? `
+        <div class="player-bar">
+          ${teamsOf(r).map(t => {
+            const members = playersOfTeam(r, t.id);
+            const sc = teamScore(r, t.id);
+            const hasPicker = members.some(m => m.id === r.currentPicker);
+            const iAmIn = members.some(m => m.id === state.myId);
+            let cls = 'player-chip';
+            if (hasPicker) cls += ' current-picker';
+            if (iAmIn) cls += ' me';
+            return `<div class="${cls}" style="border-left:3px solid ${t.color};">
+              <div class="player-chip-top">
+                <span class="player-avatar">${t.emoji}</span>
+                <div class="player-chip-name" style="color:${t.color};">${esc(t.name)}</div>
+              </div>
+              <div class="player-chip-score ${sc < 0 ? 'negative' : ''}">${sc > 0 ? '+' : ''}${sc}</div>
+              <div style="font-size:10px; color:var(--ink-faint); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                ${members.map(m => m.avatar).join(' ') || '—'}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      ` : `
+        <div class="player-bar">
+          ${nonHostPlayers.map(p => {
+            const isPicker = p.id === r.currentPicker;
+            const isMe = p.id === state.myId;
+            let cls = 'player-chip';
+            if (isPicker) cls += ' current-picker';
+            if (isMe) cls += ' me';
+            if (state.isHost) cls += ' editable';
+            const clickAttr = state.isHost ? `data-action="edit-score" data-player="${p.id}"` : '';
+            return `<div class="${cls}" ${clickAttr}>
+              <div class="player-chip-top">
+                <span class="player-avatar">${p.avatar}</span>
+                <div class="player-chip-name">${esc(p.name)}</div>
+              </div>
+              <div class="player-chip-score ${(p.score||0) < 0 ? 'negative' : ''}">${(p.score||0) > 0 ? '+' : ''}${p.score || 0}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      `}
     </div>
   `;
 }
@@ -1525,168 +1757,253 @@ function viewQuestion(){
   const nonHostPlayers = players.filter(p => p.id !== r.hostId);
   const buzzed = r.buzzedPlayer ? players.find(p => p.id === r.buzzedPlayer) : null;
   const attempted = r.attemptedBy || [];
-  const iAttempted = attempted.includes(state.myId);
+  const iAttempted = hasAttempted(r, state.myId);
   const allAttempted = attempted.length >= nonHostPlayers.length;
   const canIBuzz = !state.isHost && !buzzed && !iAttempted && r.questionState === 'buzzing';
   const iAmBuzzed = buzzed && buzzed.id === state.myId;
 
+  // Auto-size question text by length so long questions fit without page scroll
+  const qLen = (q.q || '').length;
+  const sizeClass = qLen > 220 ? 'xlong' : qLen > 110 ? 'long' : '';
+
+  // --- STAGE BODY (the question / answer area — scrolls internally if huge) ---
+  const ddP = r.ddPlayer ? players.find(p => p.id === r.ddPlayer) : null;
+  const ddTeam = (isTeamMode(r) && ddP) ? TEAM_PRESETS.find(x => x.id === ddP.teamId) : null;
+  let stageBody = '';
+  if (r.questionState === 'dd_bid') {
+    stageBody = `
+      <div style="text-align:center;">
+        <div style="font-size:64px; line-height:1; margin-bottom:8px;">🎲</div>
+        <div style="font-family:'Fraunces',serif; font-weight:900; font-size:clamp(28px,5vw,52px); color:var(--gold);">СВОЯ ГРА!</div>
+        <div style="margin-top:12px; font-size:16px; color:var(--ink-dim);">
+          ${ddP ? `${ddP.avatar} <b style="color:var(--ink);">${esc(ddP.name)}</b>${ddTeam ? ` <span style="color:${ddTeam.color};">(${ddTeam.emoji} ${esc(ddTeam.name)})</span>` : ''} ставить свої бали` : 'Гравець ставить бали'}
+        </div>
+        <div style="margin-top:6px; font-size:13px; color:var(--ink-faint);">Питання зʼявиться після ставки</div>
+      </div>`;
+  } else if (r.revealAnswer) {
+    stageBody = `
+      <div class="q-answer-reveal" style="width:100%;">
+        ${q.image ? `<img src="${q.image}" class="q-image" style="max-height:26vh; margin-bottom:10px;" alt="">` : ''}
+        <div class="q-answer-reveal-label">ПРАВИЛЬНА ВІДПОВІДЬ</div>
+        ${q.answerImage ? `<img src="${q.answerImage}" class="q-image" style="max-height:38vh; margin-bottom:8px;" alt="">` : ''}
+        ${q.a && q.a.trim() ? `<div class="q-answer-reveal-text">${escMultiline(q.a)}</div>` : ''}
+        ${q.explanation && q.explanation.trim() ? `<div style="margin-top:10px; font-size:16px; font-weight:500; color:var(--green); opacity:0.85; white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
+        ${(q.q && q.q.trim()) ? `<div style="margin-top:16px; font-size:13px; color:var(--ink-dim); white-space:pre-wrap;">Питання: ${escMultiline(q.q)}</div>` : ''}
+      </div>`;
+  } else {
+    stageBody = `
+      ${q.youtube && q.youtube.id ? `
+        <div class="yt-wrap">
+          <div class="yt-title-cover"></div>
+          <iframe
+            src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
+            title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+        </div>
+        ${state.isHost ? `<div style="font-size:12px; color:var(--ink-dim);">Натисни ▶ і поділись звуком/екраном щоб усі бачили</div>` : ''}
+      ` : ''}
+      ${q.video ? `
+        <div class="yt-wrap">
+          <video id="q-video" src="${q.video}" ${state.isHost ? 'controls' : ''} playsinline preload="auto" style="width:100%; height:100%; object-fit:contain; background:#000;"></video>
+        </div>
+        ${state.isHost ? `<div style="font-size:12px; color:var(--ink-dim);">Показуй на спільному екрані</div>` : ''}
+      ` : ''}
+      ${q.audio ? `
+        <div class="audio-player">
+          <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.12em; text-transform:uppercase; margin-bottom:8px;">🔊 Аудіопитання</div>
+          <audio id="q-audio" src="${q.audio}" preload="auto" ${state.isHost ? 'controls' : ''} style="width:100%; max-width:420px; ${state.isHost ? '' : 'display:none;'}"></audio>
+          ${state.isHost ? `
+            <div style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap;">
+              <button class="btn btn-accent btn-sm" data-action="play-audio-all">${icon('play',14)} Увімкнути для всіх</button>
+              <button class="btn btn-ghost btn-sm" data-action="stop-audio-all">⏹ Зупинити</button>
+            </div>
+            <div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Запуститься одночасно на всіх пристроях</div>
+          ` : `
+            ${state.audioBlocked ? `
+              <button class="btn btn-accent btn-sm" data-action="play-audio-local">${icon('play',14)} Увімкнути звук</button>
+              <div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Браузер заблокував автозапуск — натисни щоб почути</div>
+            ` : `
+              <div style="font-size:14px; color:${r.audioPlaying ? 'var(--green)' : 'var(--ink-dim)'};">
+                ${r.audioPlaying ? '▶ грає...' : '⏳ чекаємо на ведучого'}
+              </div>
+            `}
+          `}
+        </div>
+      ` : ''}
+      ${q.image ? `<img src="${q.image}" class="q-image" style="max-height:42vh;" alt="">` : ''}
+      ${q.q && q.q.trim() ? `<div class="qs-question-text ${sizeClass}">${escMultiline(q.q)}</div>` : ''}
+      ${state.isHost ? `
+        <div style="margin-top:16px; padding:12px; background: rgba(74,222,128,0.08); border:1px dashed rgba(74,222,128,0.3); border-radius:12px; max-width:700px;">
+          <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">ВІДПОВІДЬ (ТІЛЬКИ ТИ БАЧИШ)</div>
+          ${q.answerImage ? `<img src="${q.answerImage}" style="max-height:28vh; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
+          ${q.a && q.a.trim() ? `<div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--green); white-space:pre-wrap;">${escMultiline(q.a)}</div>` : ''}
+          ${q.explanation && q.explanation.trim() ? `<div style="margin-top:6px; font-size:14px; font-weight:500; color:var(--green); opacity:0.8; white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
+        </div>
+      ` : ''}`;
+  }
+
+  // --- TIMER BAR ---
+  const timerBar = (() => {
+    const now = serverNow();
+    if (r.questionState === 'buzzing') {
+      const total = buzzSec(r);
+      const deadline = r.buzzPhaseDeadline || (now + total * 1000);
+      const sec = Math.max(0, Math.ceil((deadline - now) / 1000));
+      const pct = Math.min(100, (sec / total) * 100);
+      return `<div class="timer-bar" id="timer-bar">
+        <div class="timer-bar-label">⏱ Натиснути баззер: <b id="timer-sec">${sec}</b> сек</div>
+        <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--accent);"></div></div>
+      </div>`;
+    }
+    if (r.questionState === 'answering' || r.questionState === 'dd_answer') {
+      const total = answerSec(r);
+      const deadline = r.answerPhaseDeadline || (now + total * 1000);
+      const sec = Math.max(0, Math.ceil((deadline - now) / 1000));
+      const pct = Math.min(100, (sec / total) * 100);
+      return `<div class="timer-bar" id="timer-bar">
+        <div class="timer-bar-label">⏱ Відповідь: <b id="timer-sec">${sec}</b> сек</div>
+        <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--gold);"></div></div>
+      </div>`;
+    }
+    return '';
+  })();
+
+  // --- CONTROLS (buzz button / host judge / countdown / etc.) ---
+  let controls = '';
+
+  if (r.questionState === 'dd_bid') {
+    const canBet = state.isHost || state.myId === r.ddPlayer;
+    const max = ddMaxBid(r);
+    if (canBet) {
+      const cur = Number.isInteger(state.ddBidLocal) ? state.ddBidLocal : 0;
+      controls += `
+        <div class="card" style="max-width:420px; margin:0 auto; width:100%;">
+          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">СТАВКА (0 — ${max})</div>
+          <input type="number" class="input" id="dd-bid" min="0" max="${max}" value="${cur}"
+            style="font-family:'Fraunces',serif; font-size:24px; font-weight:700; color:var(--gold);">
+          <div id="dd-bid-err" style="display:none; color:var(--accent); font-size:12px; margin-top:6px;">Ставка має бути від 0 до ${max}</div>
+          <button class="btn btn-gold btn-lg btn-full" id="dd-submit-btn" data-action="submit-dd-bid" style="margin-top:12px;">
+            ${icon('check',18)} Підтвердити ставку
+          </button>
+        </div>`;
+    } else {
+      controls += `<div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:8px;">
+        ⏳ ${ddP ? esc(ddP.name) : 'Гравець'} робить ставку...
+      </div>`;
+    }
+  }
+
+  if (r.questionState === 'dd_answer') {
+    const bet = typeof r.ddBid === 'number' ? r.ddBid : 0;
+    const mine = state.myId === r.ddPlayer;
+    controls += `<div class="buzzed-banner">
+      <div class="buzzed-banner-label">🎲 СВОЯ ГРА · СТАВКА ${bet}</div>
+      <div class="buzzed-banner-name">${ddP ? `${ddP.avatar} ${esc(ddP.name)}` : ''}</div>
+      ${mine ? `<div style="font-size:14px; margin-top:4px;">Відповідай вголос — ведучий слухає</div>` : ''}
+    </div>`;
+    if (state.isHost) {
+      controls += `<div class="host-controls">
+        <button class="btn btn-green btn-lg" data-action="judge" data-correct="1">${icon('check',18)} Правильно (+${bet})</button>
+        <button class="btn btn-red btn-lg" data-action="judge" data-correct="0">${icon('x',18)} Неправильно (−${bet})</button>
+      </div>`;
+    }
+  }
+
+  if (r.questionState === 'countdown' && r.countdownDeadline) {
+    const sec = Math.max(0, Math.ceil((r.countdownDeadline - serverNow()) / 1000));
+    controls += `<div style="text-align:center; padding:8px 0;">
+      <div style="font-size:12px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">Базер відкриється через</div>
+      <div id="countdown-num" style="font-family:'Fraunces',serif; font-weight:900; font-size:56px; color:var(--gold); line-height:1;">${sec}</div>
+      <div style="margin-top:4px; font-size:13px; color:var(--ink-dim);">${state.isHost ? 'Читай питання вголос!' : 'Приготуйся натискати!'}</div>
+    </div>`;
+    if (!state.isHost && r.antiSpamConfig && !iAttempted) {
+      controls += `<button class="buzz-btn" data-action="buzz">НАТИСНИ ЩОБ ВІДПОВІСТИ</button>
+        <div style="text-align:center; font-size:12px; color:var(--accent);">🔥 Хардкор: натиснеш зарано — штраф 1 сек!</div>`;
+    }
+  }
+
+  if (r.questionState === 'reading') {
+    if (state.isHost) {
+      controls += `<div style="text-align:center;">
+        <button class="btn btn-accent btn-lg" data-action="open-buzz">${icon('play',18)} Відкрити баззер для гравців</button>
+        <div style="margin-top:6px; font-size:12px; color:var(--ink-dim);">Прочитай питання вголос, потім відкрий баззер</div>
+      </div>`;
+    } else {
+      controls += `<div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:8px;">⏳ Ведучий читає питання...</div>`;
+      if (r.antiSpamConfig && !iAttempted) {
+        controls += `<button class="buzz-btn" data-action="buzz">НАТИСНИ ЩОБ ВІДПОВІСТИ</button>
+          <div style="text-align:center; font-size:12px; color:var(--accent);">🔥 Хардкор: натиснеш зарано — штраф 1 сек!</div>`;
+      }
+    }
+  }
+
+  if (buzzed) {
+    const bt = isTeamMode(r) ? TEAM_PRESETS.find(x => x.id === buzzed.teamId) : null;
+    controls += `<div class="buzzed-banner">
+      <div class="buzzed-banner-label">ВІДПОВІДАЄ${bt ? ` · <span style="color:${bt.color};">${bt.emoji} ${esc(bt.name)}</span>` : ''}</div>
+      <div class="buzzed-banner-name">${buzzed.avatar} ${esc(buzzed.name)}</div>
+      ${iAmBuzzed ? `<div style="font-size:14px; margin-top:4px;">Скажи відповідь — ведучий тебе чує</div>` : ''}
+    </div>`;
+    if (state.isHost) {
+      controls += `<div class="host-controls">
+        <button class="btn btn-green btn-lg" data-action="judge" data-correct="1">${icon('check',18)} Правильно (+${q.value})</button>
+        <button class="btn btn-red btn-lg" data-action="judge" data-correct="0">${icon('x',18)} Неправильно (−${q.value})</button>
+        <button class="btn btn-ghost btn-sm" data-action="judge" data-correct="skip">Не зараховувати</button>
+      </div>`;
+    }
+  } else if (r.questionState === 'buzzing' && !state.isHost) {
+    controls += `<button class="buzz-btn" data-action="buzz" ${iAttempted?'disabled':''}>
+      ${iAttempted ? 'Ти вже відповідав' : 'НАТИСНИ ЩОБ ВІДПОВІСТИ'}
+    </button>`;
+    controls += !iAttempted
+      ? `<div style="text-align:center; font-size:12px; color:var(--ink-dim);">або натисни <b>Пробіл</b>${r.antiSpamConfig ? ' · 🔥 хардкор: 1 сек між натисканнями' : ''}</div>`
+      : `<div style="text-align:center;"><button class="btn btn-ghost btn-sm" data-action="resync">${icon('loader',12)} Базер завис? Оновити</button></div>`;
+  }
+
+  if (state.isHost && r.questionState === 'buzzing' && !buzzed) {
+    controls += `<div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:8px;">Очікуємо хто першим натисне...</div>`;
+  }
+
+  if (attempted.length > 0 && !r.revealAnswer) {
+    controls += `<div class="attempted-list">
+      ${attempted.map(pid => {
+        const p = players.find(x => x.id === pid);
+        return p ? `<span class="attempted-chip">${p.avatar} ${esc(p.name)}</span>` : '';
+      }).join('')}
+    </div>`;
+  }
+
+  if (r.revealAnswer && state.isHost) {
+    controls += `<div style="text-align:center;">
+      <button class="btn btn-gold btn-lg" data-action="back-to-board">${icon('chevronRight',18)} На дошку</button>
+    </div>`;
+  }
+
+  if (!r.revealAnswer && state.isHost && !buzzed && (r.questionState === 'buzzing' || r.questionState === 'reading' || r.questionState === 'countdown')) {
+    controls += `<div style="text-align:center;">
+      <button class="btn btn-ghost btn-sm" data-action="reveal-answer">${icon('eye',14)} ${attempted.length > 0 ? 'Показати відповідь і закрити' : 'Пропустити (ніхто не відповів)'}</button>
+    </div>`;
+  }
+
   return `
-    <div class="container-lg slide-up">
-      <div style="display:flex; justify-content:space-between; margin-bottom:16px;">
+    <div class="question-screen slide-up">
+      <div class="qs-topbar">
         <div style="font-size:13px; color:var(--ink-dim);">Кімната <b style="color:var(--gold);">${esc(state.code)}</b></div>
         ${state.isHost ? `<button class="btn btn-ghost btn-sm" data-action="close-question">${icon('x',14)} Закрити питання</button>` : ''}
       </div>
-      <div class="q-stage">
-        <div class="q-header">
+
+      <div class="qs-stage">
+        <div class="qs-stage-header">
           <div class="q-cat">${esc(cat.name)}</div>
           <div class="q-value">${q.value}</div>
         </div>
-        ${r.revealAnswer ? `
-          <div class="q-answer-reveal">
-            <div class="q-answer-reveal-label">ПРАВИЛЬНА ВІДПОВІДЬ</div>
-            ${q.answerImage ? `<img src="${q.answerImage}" class="q-image" style="max-height:55vh; margin-bottom:8px;" alt="">` : ''}
-            ${q.a && q.a.trim() ? `<div class="q-answer-reveal-text">${escMultiline(q.a)}</div>` : ''}
-            ${q.explanation && q.explanation.trim() ? `<div style="margin-top:10px; font-size:16px; font-weight:500; color:var(--green); opacity:0.85; white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
-            ${(q.q && q.q.trim()) ? `<div style="margin-top:16px; font-size:13px; color:var(--ink-dim); white-space:pre-wrap;">Питання: ${escMultiline(q.q)}</div>` : ''}
-          </div>
-        ` : `
-          <div class="q-text">
-            ${q.image ? `<img src="${q.image}" class="q-image" alt="">` : ''}
-            ${q.q && q.q.trim() ? `<div class="q-text-inner">${escMultiline(q.q)}</div>` : ''}
-          </div>
-          ${state.isHost ? `
-            <div style="margin-top:24px; padding:12px; background: rgba(74,222,128,0.08); border:1px dashed rgba(74,222,128,0.3); border-radius:12px; text-align:center;">
-              <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">ВІДПОВІДЬ (ТІЛЬКИ ТИ БАЧИШ)</div>
-              ${q.answerImage ? `<img src="${q.answerImage}" style="max-height:40vh; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
-              ${q.a && q.a.trim() ? `<div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--green); white-space:pre-wrap;">${escMultiline(q.a)}</div>` : ''}
-              ${q.explanation && q.explanation.trim() ? `<div style="margin-top:6px; font-size:14px; font-weight:500; color:var(--green); opacity:0.8; white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
-            </div>
-          ` : ''}
-        `}
+        <div class="qs-stage-body">
+          <div class="qs-body-inner">${stageBody}</div>
+        </div>
       </div>
 
-      <div style="margin-top:24px;">
-        ${(() => {
-          // Compute timer seconds left. Be resilient: if a deadline is
-          // momentarily missing (between state transitions), still show the bar.
-          const now = serverNow();
-          if (r.questionState === 'buzzing') {
-            const total = buzzSec(r);
-            const deadline = r.buzzPhaseDeadline || (now + total * 1000);
-            const sec = Math.max(0, Math.ceil((deadline - now) / 1000));
-            const pct = Math.min(100, (sec / total) * 100);
-            return `<div class="timer-bar" id="timer-bar">
-              <div class="timer-bar-label">⏱ Натиснути баззер: <b id="timer-sec">${sec}</b> сек</div>
-              <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--accent);"></div></div>
-            </div>`;
-          }
-          if (r.questionState === 'answering') {
-            const total = answerSec(r);
-            const deadline = r.answerPhaseDeadline || (now + total * 1000);
-            const sec = Math.max(0, Math.ceil((deadline - now) / 1000));
-            const pct = Math.min(100, (sec / total) * 100);
-            return `<div class="timer-bar" id="timer-bar">
-              <div class="timer-bar-label">⏱ Відповідь: <b id="timer-sec">${sec}</b> сек</div>
-              <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--gold);"></div></div>
-            </div>`;
-          }
-          return '';
-        })()}
-
-        ${r.questionState === 'countdown' && r.countdownDeadline ? (() => {
-          const sec = Math.max(0, Math.ceil((r.countdownDeadline - serverNow()) / 1000));
-          return `<div style="text-align:center; padding:24px 0;">
-            <div style="font-size:13px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:8px;">Базер відкриється через</div>
-            <div id="countdown-num" style="font-family:'Fraunces',serif; font-weight:900; font-size:72px; color:var(--gold); line-height:1;">${sec}</div>
-            <div style="margin-top:8px; font-size:13px; color:var(--ink-dim);">${state.isHost ? 'Читай питання вголос!' : 'Приготуйся натискати!'}</div>
-          </div>
-          ${!state.isHost && r.antiSpamConfig && !iAttempted ? `
-            <button class="buzz-btn" data-action="buzz">НАТИСНИ ЩОБ ВІДПОВІСТИ</button>
-            <div style="text-align:center; margin-top:8px; font-size:12px; color:var(--accent);">🔥 Хардкор: натиснеш зарано — отримаєш 1 сек штрафу!</div>
-          ` : ''}`;
-        })() : ''}
-
-        ${r.questionState === 'reading' ? (state.isHost ? `
-          <div style="text-align:center;">
-            <button class="btn btn-accent btn-lg" data-action="open-buzz">${icon('play',18)} Відкрити баззер для гравців</button>
-            <div style="margin-top:8px; font-size:12px; color:var(--ink-dim);">Прочитай питання вголос, потім відкрий баззер</div>
-          </div>
-        ` : `
-          <div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:16px;">
-            ⏳ Ведучий читає питання... баззер скоро відкриється
-          </div>
-          ${r.antiSpamConfig && !iAttempted ? `
-            <button class="buzz-btn" data-action="buzz">НАТИСНИ ЩОБ ВІДПОВІСТИ</button>
-            <div style="text-align:center; margin-top:8px; font-size:12px; color:var(--accent);">🔥 Хардкор: натиснеш зарано — отримаєш 1 сек штрафу!</div>
-          ` : ''}
-        `) : ''}
-
-        ${buzzed ? `
-          <div class="buzzed-banner">
-            <div class="buzzed-banner-label">ВІДПОВІДАЄ</div>
-            <div class="buzzed-banner-name">${buzzed.avatar} ${esc(buzzed.name)}</div>
-            ${iAmBuzzed ? `<div style="font-size:14px; margin-top:8px;">Скажи відповідь — ведучий тебе чує</div>` : ''}
-          </div>
-          ${state.isHost ? `
-            <div class="host-controls">
-              <button class="btn btn-green btn-lg" data-action="judge" data-correct="1">${icon('check',18)} Правильно (+${q.value})</button>
-              <button class="btn btn-red btn-lg" data-action="judge" data-correct="0">${icon('x',18)} Неправильно (−${q.value})</button>
-              <button class="btn btn-ghost btn-sm" data-action="judge" data-correct="skip">Не зараховувати</button>
-            </div>
-          ` : ''}
-        ` : (r.questionState === 'buzzing' && !state.isHost ? `
-          <button class="buzz-btn" data-action="buzz" ${iAttempted?'disabled':''}>
-            ${iAttempted ? 'Ти вже відповідав' : 'НАТИСНИ ЩОБ ВІДПОВІСТИ'}
-          </button>
-          ${!iAttempted ? `<div style="text-align:center; margin-top:8px; font-size:12px; color:var(--ink-dim);">або натисни <b>Пробіл</b> на клавіатурі${r.antiSpamConfig ? ' · 🔥 хардкор: 1 сек між натисканнями' : ''}</div>` : `<div style="text-align:center; margin-top:8px;"><button class="btn btn-ghost btn-sm" data-action="resync">${icon('loader',12)} Базер завис? Оновити</button></div>`}
-        ` : '')}
-
-        ${state.isHost && r.questionState === 'buzzing' && !buzzed ? `
-          <div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:16px;">
-            Очікуємо хто першим натисне...
-          </div>
-        ` : ''}
-
-        ${attempted.length > 0 && !r.revealAnswer ? `
-          <div class="attempted-list">
-            ${attempted.map(pid => {
-              const p = players.find(x => x.id === pid);
-              return p ? `<span class="attempted-chip">${p.avatar} ${esc(p.name)}</span>` : '';
-            }).join('')}
-          </div>
-        ` : ''}
-
-        ${r.revealAnswer && state.isHost ? `
-          <div style="text-align:center; margin-top:16px;">
-            <button class="btn btn-gold btn-lg" data-action="back-to-board">${icon('chevronRight',18)} На дошку</button>
-          </div>
-        ` : ''}
-
-        ${!r.revealAnswer && state.isHost && !buzzed && (r.questionState === 'buzzing' || r.questionState === 'reading' || r.questionState === 'countdown') ? `
-          <div style="text-align:center; margin-top:12px;">
-            <button class="btn btn-ghost btn-sm" data-action="reveal-answer">${icon('eye',14)} ${attempted.length > 0 ? 'Показати відповідь і закрити' : 'Пропустити (ніхто не відповів)'}</button>
-          </div>
-        ` : ''}
-      </div>
-
-      <div class="player-bar">
-        ${nonHostPlayers.map(p => {
-          const isBuzzed = buzzed && buzzed.id === p.id;
-          const hasAttempted = attempted.includes(p.id);
-          const isMe = p.id === state.myId;
-          let cls = 'player-chip';
-          if (isBuzzed) cls += ' current-picker';
-          if (isMe) cls += ' me';
-          if (state.isHost) cls += ' editable';
-          const clickAttr = state.isHost ? `data-action="edit-score" data-player="${p.id}"` : '';
-          return `<div class="${cls}" style="${hasAttempted && !isBuzzed ? 'opacity:0.5;' : ''}" ${clickAttr}>
-            <div class="player-chip-top">
-              <span class="player-avatar">${p.avatar}</span>
-              <div class="player-chip-name">${esc(p.name)}</div>
-            </div>
-            <div class="player-chip-score ${(p.score||0) < 0 ? 'negative' : ''}">${(p.score||0) > 0 ? '+' : ''}${p.score || 0}</div>
-          </div>`;
-        }).join('')}
+      <div class="qs-controls">
+        ${timerBar}
+        ${controls}
       </div>
     </div>
   `;
@@ -1696,6 +2013,64 @@ function viewResults(){
   const r = state.room;
   if (!r) return '';
   const players = getPlayerList(r);
+  const teamMode = isTeamMode(r);
+
+  if (teamMode) {
+    const ranked = teamsOf(r)
+      .map(t => ({ ...t, score: teamScore(r, t.id), members: playersOfTeam(r, t.id) }))
+      .sort((a,b) => b.score - a.score);
+    const win = ranked[0];
+    return `
+      <div class="container slide-up" style="min-height:calc(100vh - 48px); display:flex; flex-direction:column; justify-content:center;">
+        <div style="text-align:center; margin-bottom:40px;">
+          <div class="eyebrow">ФІНАЛ</div>
+          <h2 style="font-family:'Fraunces',serif; font-size:56px; font-weight:900; margin-bottom:24px;">Команда-переможець</h2>
+          ${win ? `
+            <div class="winner-card" style="border-color:${win.color};">
+              <div class="winner-emoji">${win.emoji}</div>
+              <div class="winner-name" style="color:${win.color};">${esc(win.name)}</div>
+              <div class="winner-score">${win.score} БАЛІВ</div>
+              <div style="margin-top:8px; font-size:14px; color:var(--ink-dim);">${win.members.map(m => `${m.avatar} ${esc(m.name)}`).join(' · ') || '—'}</div>
+            </div>
+          ` : '<div style="color:var(--ink-dim)">Без переможця</div>'}
+        </div>
+        <div class="card" style="margin-bottom:24px;">
+          <div style="font-size:14px; color:var(--ink-dim); margin-bottom:12px;">Турнірна таблиця</div>
+          ${ranked.map((t, rank) => `
+            <div class="final-row ${rank===0?'first':''}" style="border-left:3px solid ${t.color};">
+              <div class="rank">${rank+1}</div>
+              <span style="font-size:24px;">${t.emoji}</span>
+              <div class="name">
+                <div style="color:${t.color}; font-weight:700;">${esc(t.name)}</div>
+                <div style="font-size:12px; color:var(--ink-faint);">${t.members.map(m => m.avatar).join(' ') || '—'}</div>
+              </div>
+              <div class="pts ${t.score<0?'negative':''}">${t.score}</div>
+            </div>
+          `).join('')}
+        </div>
+        ${(state.newAchievements && state.newAchievements.length) ? `
+          <div class="card" style="margin-bottom:16px; border-color:rgba(240,180,41,0.5); background:rgba(240,180,41,0.07);">
+            <div style="font-size:12px; color:var(--gold); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:8px;">🎉 Нові досягнення</div>
+            <div style="display:flex; flex-wrap:wrap; gap:10px;">
+              ${state.newAchievements.map(id => {
+                const a = ACHIEVEMENTS.find(x => x.id === id) || HOST_ACHIEVEMENTS.find(x => x.id === id);
+                return a ? `<div style="display:flex; align-items:center; gap:6px; background:var(--soft); padding:6px 10px; border-radius:999px;">
+                  <span style="font-size:18px;">${a.emoji}</span>
+                  <span style="font-size:13px; font-weight:600;">${esc(a.name)}</span>
+                </div>` : '';
+              }).join('')}
+            </div>
+          </div>
+        ` : ''}
+        <div style="display:flex; gap:12px;">
+          ${state.isHost ? `<button class="btn btn-gold btn-lg" style="flex:1;" data-action="play-again">${icon('refresh',18)} Ще раунд</button>` : ''}
+          ${!state.isHost ? `<button class="btn btn-ghost btn-lg" style="flex:1;" data-action="open-stats">${icon('trophy',18)} Статистика</button>` : ''}
+          <button class="btn btn-ghost btn-lg" style="flex:1;" data-action="leave">Вийти</button>
+        </div>
+      </div>
+    `;
+  }
+
   const sorted = players.filter(p => p.id !== r.hostId).sort((a,b)=>(b.score||0)-(a.score||0));
   const winner = sorted[0];
   return `
@@ -1722,8 +2097,23 @@ function viewResults(){
           </div>
         `).join('')}
       </div>
+      ${(state.newAchievements && state.newAchievements.length) ? `
+        <div class="card" style="margin-bottom:16px; border-color:rgba(240,180,41,0.5); background:rgba(240,180,41,0.07);">
+          <div style="font-size:12px; color:var(--gold); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:8px;">🎉 Нові досягнення</div>
+          <div style="display:flex; flex-wrap:wrap; gap:10px;">
+            ${state.newAchievements.map(id => {
+            const a = ACHIEVEMENTS.find(x => x.id === id) || HOST_ACHIEVEMENTS.find(x => x.id === id);
+            return a ? `<div style="display:flex; align-items:center; gap:6px; background:var(--soft); padding:6px 10px; border-radius:999px;">
+              <span style="font-size:18px;">${a.emoji}</span>
+              <span style="font-size:13px; font-weight:600;">${esc(a.name)}</span>
+            </div>` : '';
+            }).join('')}
+          </div>
+        </div>
+      ` : ''}
       <div style="display:flex; gap:12px;">
         ${state.isHost ? `<button class="btn btn-gold btn-lg" style="flex:1;" data-action="play-again">${icon('refresh',18)} Ще раунд</button>` : ''}
+        ${!state.isHost ? `<button class="btn btn-ghost btn-lg" style="flex:1;" data-action="open-stats">${icon('trophy',18)} Статистика</button>` : ''}
         <button class="btn btn-ghost btn-lg" style="flex:1;" data-action="leave">Вийти</button>
       </div>
     </div>
@@ -1748,9 +2138,22 @@ function viewRoundDone(){
       </div>
       <div class="card" style="margin-bottom:24px;">
         <div style="font-size:14px; color:var(--ink-dim); margin-bottom:12px;">
-          Поточні бали${state.isHost ? ' · <span style="color:var(--gold);">клікни на гравця щоб змінити бали</span>' : ''}
+          Поточні бали${state.isHost && !isTeamMode(r) ? ' · <span style="color:var(--gold);">клікни на гравця щоб змінити бали</span>' : ''}
         </div>
-        ${sorted.map((p, rank) => `
+        ${isTeamMode(r) ? teamsOf(r)
+          .map(t => ({...t, score: teamScore(r, t.id), members: playersOfTeam(r, t.id)}))
+          .sort((a,b) => b.score - a.score)
+          .map((t, rank) => `
+            <div class="final-row ${rank===0?'first':''}" style="border-left:3px solid ${t.color};">
+              <div class="rank">${rank+1}</div>
+              <span style="font-size:24px;">${t.emoji}</span>
+              <div class="name">
+                <div style="color:${t.color}; font-weight:700;">${esc(t.name)}</div>
+                <div style="font-size:11px; color:var(--ink-faint);">${t.members.map(m => m.avatar).join(' ') || '—'}</div>
+              </div>
+              <div class="pts ${t.score<0?'negative':''}">${t.score}</div>
+            </div>
+          `).join('') : sorted.map((p, rank) => `
           <div class="final-row ${rank===0?'first':''} ${state.isHost ? 'editable-row' : ''}" ${state.isHost ? `data-action="edit-score" data-player="${p.id}"` : ''}>
             <div class="rank">${rank+1}</div>
             <span style="font-size:24px;">${p.avatar}</span>
@@ -1760,7 +2163,7 @@ function viewRoundDone(){
           </div>
         `).join('')}
       </div>
-      ${state.isHost && sorted.some(p => (p.score||0) < 0) ? `
+      ${state.isHost && !isTeamMode(r) && sorted.some(p => (p.score||0) < 0) ? `
         <div class="info-text" style="margin-bottom:16px;">
           💡 У когось мінусові бали — щоб вони могли зробити ставку у фіналі, підніми їм бали (клік по гравцю вище).
         </div>
@@ -1824,19 +2227,19 @@ function viewFinalSetup(){
 function viewFinalBid(){
   const r = state.room;
   if (!r || !r.finalQ) return '';
-  const players = getPlayerList(r);
-  const nonHost = players.filter(p => p.id !== r.hostId);
-  const me = players.find(p => p.id === state.myId);
+  const teamMode = isTeamMode(r);
+  const keys = finalEntityKeys(r);
   const myBids = r.finalBids || {};
-  const myScore = Math.max(FINAL_MIN_BID_CAP, me?.score || 0);
-  const allBidsSubmittedCount = Object.values(myBids).filter(b => b && b.bidSubmitted).length;
+  const myKey = myFinalKey(r);
+  const myScore = Math.max(FINAL_MIN_BID_CAP, myKey ? finalEntityScore(r, myKey) : 0);
+  const allBidsSubmittedCount = keys.filter(k => myBids[k] && myBids[k].bidSubmitted).length;
 
   if (state.isHost) {
     return `
       <div class="container slide-up" style="padding-top:24px;">
         <div class="eyebrow">ФІНАЛ · ФАЗА 1 · СТАВКИ</div>
         <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-top:8px; margin-bottom:8px;">${esc(r.finalQ.category)}</h2>
-        <p style="color:var(--ink-dim); margin-bottom:24px;">Гравці бачать тільки категорію і ставлять бали. Питання покажеться у фазі 2.</p>
+        <p style="color:var(--ink-dim); margin-bottom:24px;">${teamMode ? 'Команди' : 'Гравці'} бачать тільки категорію і ставлять бали. Питання покажеться у фазі 2.</p>
         <div class="card" style="margin-bottom:16px;">
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px;">ПИТАННЯ (тільки ти бачиш)</div>
           <div style="font-family:'Fraunces',serif; font-size:20px; font-weight:700; margin-bottom:12px;">${esc(r.finalQ.q)}</div>
@@ -1845,21 +2248,25 @@ function viewFinalBid(){
         </div>
         <div class="card" style="margin-bottom:16px;">
           <div style="font-size:14px; color:var(--ink-dim); margin-bottom:12px;">
-            Поставили ставку: ${allBidsSubmittedCount} з ${nonHost.length}
+            Поставили ставку: ${allBidsSubmittedCount} з ${keys.length}
           </div>
-          ${nonHost.map(p => {
-            const sub = myBids[p.id];
+          ${keys.map(k => {
+            const info = finalEntityInfo(r, k);
+            const sub = myBids[k];
             const done = sub && sub.bidSubmitted;
-            return `<div class="final-row">
-              <span style="font-size:20px;">${p.avatar}</span>
-              <div class="name">${esc(p.name)}</div>
+            return `<div class="final-row" ${teamMode ? `style="border-left:3px solid ${info.color};"` : ''}>
+              <span style="font-size:20px;">${info.avatar}</span>
+              <div class="name">
+                <div ${teamMode ? `style="color:${info.color}; font-weight:700;"` : ''}>${esc(info.name)}</div>
+                ${teamMode ? `<div style="font-size:11px; color:var(--ink-faint);">${info.members.map(m => m.avatar).join(' ')}</div>` : ''}
+              </div>
               <div style="color:${done?'var(--green)':'var(--ink-dim)'}; font-size:13px;">${done ? `✓ ${sub.bid}` : '⌛ Очікуємо'}</div>
             </div>`;
           }).join('')}
         </div>
-        ${allBidsSubmittedCount === nonHost.length && nonHost.length > 0 ? `
+        ${allBidsSubmittedCount === keys.length && keys.length > 0 ? `
           <button class="btn btn-gold btn-lg btn-full" data-action="start-final-answer-phase" style="margin-top:8px;">
-            ${icon('play',18)} Показати питання гравцям (90 сек на відповідь)
+            ${icon('play',18)} Показати питання (90 сек на відповідь)
           </button>
         ` : `
           <button class="btn btn-ghost btn-lg btn-full" data-action="start-final-answer-phase" style="margin-top:8px;">
@@ -1871,30 +2278,40 @@ function viewFinalBid(){
   }
 
   // Player view
+  if (!myKey) {
+    return `<div class="container slide-up" style="padding-top:24px;">
+      <div class="eyebrow">ФІНАЛ</div>
+      <div class="card" style="margin-top:16px; text-align:center;">Тебе не додали до команди — фінал проходить без тебе.</div>
+    </div>`;
+  }
   const bid = state.finalBidLocal;
-  const ans = state.finalAnswerLocal;
   const validBid = Number.isInteger(bid) && bid >= 0 && bid <= myScore;
-  const myBid = myBids[state.myId];
+  const myBid = myBids[myKey];
   const bidAlreadySubmitted = myBid && myBid.bidSubmitted;
+  const myInfo = finalEntityInfo(r, myKey);
+  const curScore = finalEntityScore(r, myKey);
   return `
     <div class="container slide-up" style="padding-top:24px;">
       <div class="eyebrow">ФІНАЛ · ФАЗА 1 · СТАВКА</div>
       <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:900; margin-top:8px;">${esc(r.finalQ.category)}</h2>
+      ${teamMode ? `<div style="margin-top:8px; font-size:14px; color:${myInfo.color}; font-weight:700;">${myInfo.avatar} ${esc(myInfo.name)} — ставка спільна на команду</div>` : ''}
       <p style="color:var(--ink-dim); margin-top:8px; margin-bottom:24px;">Постав скільки балів готовий поставити на правильну відповідь. Питання покажуть після того як всі поставлять.</p>
       ${bidAlreadySubmitted ? `
         <div class="card" style="text-align:center;">
           <div style="font-size:48px; margin-bottom:12px;">✓</div>
-          <div style="font-size:14px; color:var(--ink-dim); margin-bottom:4px;">ТВОЯ СТАВКА</div>
+          <div style="font-size:14px; color:var(--ink-dim); margin-bottom:4px;">${teamMode ? 'СТАВКА КОМАНДИ' : 'ТВОЯ СТАВКА'}</div>
           <div style="font-family:'Fraunces',serif; font-size:42px; font-weight:900; color:var(--gold);">${myBid.bid}</div>
-          <div style="margin-top:12px; color:var(--ink-dim); font-size:13px;">Очікуємо інших гравців і питання від ведучого</div>
+          ${teamMode && myBid.byName ? `<div style="margin-top:6px; font-size:12px; color:var(--ink-faint);">поставив ${esc(myBid.byName)}</div>` : ''}
+          <div style="margin-top:12px; color:var(--ink-dim); font-size:13px;">Очікуємо решту і питання від ведучого</div>
         </div>
       ` : `
         <div class="card">
-          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ТВОЇ БАЛИ</div>
-          <div style="font-family:'Fraunces',serif; font-size:36px; font-weight:900; color:var(--gold); margin-bottom:16px;">${me?.score || 0}</div>
+          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">${teamMode ? 'БАЛИ КОМАНДИ' : 'ТВОЇ БАЛИ'}</div>
+          <div style="font-family:'Fraunces',serif; font-size:36px; font-weight:900; color:var(--gold); margin-bottom:16px;">${curScore}</div>
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">СКІЛЬКИ СТАВИШ (0 — ${myScore})</div>
           <input type="number" class="input" id="final-bid" min="0" max="${myScore}" value="${bid}" style="font-family:'Fraunces',serif; font-size:24px; font-weight:700; color:var(--accent);">
-          ${(me?.score || 0) < FINAL_MIN_BID_CAP ? `<div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">У тебе мало балів, тож можеш поставити до ${FINAL_MIN_BID_CAP} — маєш шанс відігратись 🎯</div>` : ''}
+          ${curScore < FINAL_MIN_BID_CAP ? `<div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Балів мало, тож можна поставити до ${FINAL_MIN_BID_CAP} — є шанс відігратись 🎯</div>` : ''}
+          ${teamMode ? `<div style="font-size:12px; color:var(--ink-faint); margin-top:6px;">Це ставка за всю команду — домовтесь між собою</div>` : ''}
         </div>
         <div id="final-bid-err" class="err-text" style="display:${validBid ? 'none' : 'block'};">Ставка має бути від 0 до ${myScore}</div>
         <button id="final-submit-btn" class="btn btn-accent btn-lg btn-full" data-action="submit-final-bid" ${!validBid ? 'disabled' : ''} style="margin-top:16px;">
@@ -1909,12 +2326,12 @@ function viewFinalBid(){
 function viewFinalAnswer(){
   const r = state.room;
   if (!r || !r.finalQ) return '';
-  const players = getPlayerList(r);
-  const nonHost = players.filter(p => p.id !== r.hostId);
-  const me = players.find(p => p.id === state.myId);
+  const teamMode = isTeamMode(r);
+  const keys = finalEntityKeys(r);
   const bids = r.finalBids || {};
-  const myBid = bids[state.myId];
-  const allAnsweredCount = Object.values(bids).filter(b => b && b.answerSubmitted).length;
+  const myKey = myFinalKey(r);
+  const myBid = myKey ? bids[myKey] : null;
+  const allAnsweredCount = keys.filter(k => bids[k] && bids[k].answerSubmitted).length;
 
   if (state.isHost) {
     return `
@@ -1937,19 +2354,20 @@ function viewFinalAnswer(){
         </div>
         <div class="card" style="margin-top:16px;">
           <div style="font-size:14px; color:var(--ink-dim); margin-bottom:12px;">
-            Відповіли: ${allAnsweredCount} з ${nonHost.length}
+            Відповіли: ${allAnsweredCount} з ${keys.length}
           </div>
-          ${nonHost.map(p => {
-            const sub = bids[p.id];
+          ${keys.map(k => {
+            const info = finalEntityInfo(r, k);
+            const sub = bids[k];
             const done = sub && sub.answerSubmitted;
-            return `<div class="final-row">
-              <span style="font-size:20px;">${p.avatar}</span>
-              <div class="name">${esc(p.name)}</div>
+            return `<div class="final-row" ${teamMode ? `style="border-left:3px solid ${info.color};"` : ''}>
+              <span style="font-size:20px;">${info.avatar}</span>
+              <div class="name" ${teamMode ? `style="color:${info.color}; font-weight:700;"` : ''}>${esc(info.name)}</div>
               <div style="color:${done?'var(--green)':'var(--ink-dim)'}; font-size:13px;">${done ? '✓ Готово' : '⌛ Думає'}</div>
             </div>`;
           }).join('')}
         </div>
-        ${allAnsweredCount === nonHost.length && nonHost.length > 0 ? `
+        ${allAnsweredCount === keys.length && keys.length > 0 ? `
           <button class="btn btn-gold btn-lg btn-full" data-action="go-final-reveal" style="margin-top:16px;">
             ${icon('eye',18)} Переглянути відповіді
           </button>
@@ -1970,9 +2388,10 @@ function viewFinalAnswer(){
         <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-top:8px;">Готово</h2>
         <div class="card" style="margin-top:24px; text-align:center;">
           <div style="font-size:48px; margin-bottom:12px;">✓</div>
-          <div style="color:var(--ink-dim); margin-bottom:12px;">Очікуємо інших гравців і вердикт ведучого</div>
-          <div style="font-size:13px;">Твоя ставка: <b style="color:var(--gold);">${myBid.bid}</b></div>
-          <div style="font-size:13px; margin-top:4px;">Твоя відповідь: <b>${esc(myBid.answer || '')}</b></div>
+          <div style="color:var(--ink-dim); margin-bottom:12px;">Очікуємо решту і вердикт ведучого</div>
+          <div style="font-size:13px;">${teamMode ? 'Ставка команди' : 'Твоя ставка'}: <b style="color:var(--gold);">${myBid.bid}</b></div>
+          <div style="font-size:13px; margin-top:4px;">${teamMode ? 'Відповідь команди' : 'Твоя відповідь'}: <b>${esc(myBid.answer || '')}</b></div>
+          ${teamMode && myBid.answerByName ? `<div style="font-size:12px; color:var(--ink-faint); margin-top:6px;">подав ${esc(myBid.answerByName)}</div>` : ''}
         </div>
       </div>
     `;
@@ -1991,7 +2410,7 @@ function viewFinalAnswer(){
           <div class="timer-bar-track"><div class="timer-bar-fill" id="timer-fill" style="width:${pct}%; background:var(--accent);"></div></div>
         </div>`;
       })() : ''}
-      <p style="color:var(--ink-dim); margin-top:8px; margin-bottom:16px;">Твоя ставка: <b style="color:var(--gold);">${myBid?.bid ?? 0}</b> балів. Напиши відповідь — встигни до закінчення часу.</p>
+      <p style="color:var(--ink-dim); margin-top:8px; margin-bottom:16px;">${teamMode ? 'Ставка команди' : 'Твоя ставка'}: <b style="color:var(--gold);">${myBid?.bid ?? 0}</b> балів. Напиши відповідь — встигни до закінчення часу.${teamMode ? ' <b>Відповідь одна на команду</b> — домовтесь хто подає.' : ''}</p>
       <div class="card">
         <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px;">ПИТАННЯ</div>
         <div style="font-family:'Fraunces',serif; font-size:22px; font-weight:700; margin-bottom:16px;">${esc(r.finalQ.q)}</div>
@@ -2008,45 +2427,44 @@ function viewFinalAnswer(){
 function viewFinalReveal(){
   const r = state.room;
   if (!r || !r.finalQ) return '';
-  const players = getPlayerList(r);
-  const nonHost = players.filter(p => p.id !== r.hostId);
+  const teamMode = isTeamMode(r);
   const bids = r.finalBids || {};
   const judgement = r.finalJudgement || {};
   const base = r.finalBaseScores || {};
+  const allKeys = finalEntityKeys(r);
 
-  // Everyone who placed a bid participates in the reveal — even if they didn't
-  // submit an answer (their bid still gets deducted as a wrong answer).
-  // Order: smallest bid first → biggest bid last (classic Jeopardy drama).
-  const participants = nonHost
-    .filter(p => bids[p.id] && bids[p.id].bidSubmitted)
+  // Everyone who placed a bid participates in the reveal — even without an answer
+  // (their bid still gets deducted). Order: smallest bid first (Jeopardy drama).
+  const participants = allKeys
+    .filter(k => bids[k] && bids[k].bidSubmitted)
     .sort((a, b) => {
-      const ba = (typeof bids[a.id].bid === 'number') ? bids[a.id].bid : 0;
-      const bb = (typeof bids[b.id].bid === 'number') ? bids[b.id].bid : 0;
+      const ba = (typeof bids[a].bid === 'number') ? bids[a].bid : 0;
+      const bb = (typeof bids[b].bid === 'number') ? bids[b].bid : 0;
       return ba - bb;
     });
-  // Players who didn't even place a bid — shown separately, nothing to judge
-  const nonParticipants = nonHost.filter(p => !bids[p.id] || !bids[p.id].bidSubmitted);
+  const nonParticipants = allKeys.filter(k => !bids[k] || !bids[k].bidSubmitted);
 
   const revealIdx = r.finalRevealIndex || 0;
   const total = participants.length;
   const currentPlayer = revealIdx < total ? participants[revealIdx] : null;
   const allRevealed = revealIdx >= total;
-  const currentJudged = currentPlayer && (judgement[currentPlayer.id] === 'correct' || judgement[currentPlayer.id] === 'wrong');
+  const currentJudged = currentPlayer && (judgement[currentPlayer] === 'correct' || judgement[currentPlayer] === 'wrong');
 
-  // Card renderer for an already-revealed (judged) player — compact
-  const revealedCard = (p) => {
-    const sub = bids[p.id];
-    const baseScore = base[p.id] != null ? base[p.id] : (p.score || 0);
-    const curScore = p.score || 0;
-    const verdict = judgement[p.id];
+  // Compact card for an already-judged entity
+  const revealedCard = (k) => {
+    const info = finalEntityInfo(r, k);
+    const sub = bids[k];
+    const baseScore = base[k] != null ? base[k] : finalEntityScore(r, k);
+    const curScore = finalEntityScore(r, k);
+    const verdict = judgement[k];
     const safeBid = (typeof sub.bid === 'number' && !isNaN(sub.bid)) ? sub.bid : 0;
     const borderClr = verdict === 'correct' ? 'rgba(74,222,128,0.5)' : verdict === 'wrong' ? 'rgba(232,74,48,0.5)' : 'var(--line)';
     return `<div class="card" style="margin-bottom:10px; border-color:${borderClr}; opacity:0.9;">
       <div style="display:flex; align-items:center; gap:10px;">
-        <span style="font-size:20px;">${p.avatar}</span>
+        <span style="font-size:20px;">${info.avatar}</span>
         <div style="flex:1; min-width:0;">
-          <b style="display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(p.name)}</b>
-          <span style="font-size:13px; color:var(--ink-dim);">${sub.answerSubmitted && sub.answer ? `«${esc(sub.answer)}»` : '⏱ не відповів'} · ставка ${safeBid}</span>
+          <b style="display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; ${teamMode?`color:${info.color};`:''}">${esc(info.name)}</b>
+          <span style="font-size:13px; color:var(--ink-dim);">${sub.answerSubmitted && sub.answer ? `«${esc(sub.answer)}»` : '⏱ не відповіли'} · ставка ${safeBid}</span>
         </div>
         <div style="text-align:right;">
           <div style="font-size:12px; font-weight:700; color:${verdict==='correct'?'var(--green)':'var(--accent)'};">${verdict==='correct'?'✓':'✗'}</div>
@@ -2058,18 +2476,20 @@ function viewFinalReveal(){
     </div>`;
   };
 
-  // Big spotlight card for the current player being judged
-  const spotlightCard = (p) => {
-    const sub = bids[p.id];
-    const baseScore = base[p.id] != null ? base[p.id] : (p.score || 0);
-    const curScore = p.score || 0;
-    const verdict = judgement[p.id];
+  // Big spotlight card for the entity being judged now
+  const spotlightCard = (k) => {
+    const info = finalEntityInfo(r, k);
+    const sub = bids[k];
+    const baseScore = base[k] != null ? base[k] : finalEntityScore(r, k);
+    const curScore = finalEntityScore(r, k);
+    const verdict = judgement[k];
     const safeBid = (typeof sub.bid === 'number' && !isNaN(sub.bid)) ? sub.bid : 0;
     const borderClr = verdict === 'correct' ? 'var(--green)' : verdict === 'wrong' ? 'var(--accent)' : 'var(--gold)';
     return `<div class="card spotlight-card" style="border:2px solid ${borderClr}; padding:24px;">
       <div style="text-align:center; margin-bottom:16px;">
-        <div style="font-size:48px; margin-bottom:4px;">${p.avatar}</div>
-        <div style="font-family:'Fraunces',serif; font-weight:900; font-size:24px;">${esc(p.name)}</div>
+        <div style="font-size:48px; margin-bottom:4px;">${info.avatar}</div>
+        <div style="font-family:'Fraunces',serif; font-weight:900; font-size:24px; ${teamMode?`color:${info.color};`:''}">${esc(info.name)}</div>
+        ${teamMode && info.members.length ? `<div style="font-size:12px; color:var(--ink-faint); margin-top:2px;">${info.members.map(m => `${m.avatar} ${esc(m.name)}`).join(' · ')}</div>` : ''}
         <div style="font-size:13px; color:var(--gold); font-weight:700; margin-top:4px;">поставив ${safeBid} балів</div>
       </div>
       <div style="background:var(--soft); padding:16px; border-radius:12px; text-align:center; margin-bottom:16px;">
@@ -2098,10 +2518,10 @@ function viewFinalReveal(){
       `}
       ${state.isHost ? `
         <div style="display:flex; gap:8px; margin-top:20px;">
-          <button class="btn ${verdict==='correct'?'btn-green':'btn-ghost'} btn-lg" style="flex:1;" data-action="judge-final" data-player="${p.id}" data-verdict="correct">
+          <button class="btn ${verdict==='correct'?'btn-green':'btn-ghost'} btn-lg" style="flex:1;" data-action="judge-final" data-player="${k}" data-verdict="correct">
             ${icon('check',18)} Правильно (+${safeBid})
           </button>
-          <button class="btn ${verdict==='wrong'?'btn-red':'btn-ghost'} btn-lg" style="flex:1;" data-action="judge-final" data-player="${p.id}" data-verdict="wrong">
+          <button class="btn ${verdict==='wrong'?'btn-red':'btn-ghost'} btn-lg" style="flex:1;" data-action="judge-final" data-player="${k}" data-verdict="wrong">
             ${icon('x',18)} Неправильно (−${safeBid})
           </button>
         </div>
@@ -2137,7 +2557,7 @@ function viewFinalReveal(){
         </div>
         ${state.isHost ? `
           <button class="btn ${currentJudged?'btn-gold':'btn-ghost'} btn-lg btn-full" data-action="next-final-reveal" ${!currentJudged?'disabled':''} style="margin-top:16px;">
-            ${revealIdx + 1 < total ? `${icon('chevronRight',18)} Наступний гравець` : `${icon('chevronRight',18)} До результатів нижче`}
+            ${revealIdx + 1 < total ? `${icon('chevronRight',18)} Наступний` : `${icon('chevronRight',18)} До результатів нижче`}
           </button>
         ` : ''}
       ` : ''}
@@ -2146,15 +2566,18 @@ function viewFinalReveal(){
         ${nonParticipants.length > 0 ? `
           <div style="margin-top:20px;">
             <div style="font-size:12px; color:var(--ink-dim); margin-bottom:8px;">Не відповідали у фіналі:</div>
-            ${nonParticipants.map(p => `
+            ${nonParticipants.map(k => {
+              const info = finalEntityInfo(r, k);
+              const sc = finalEntityScore(r, k);
+              return `
               <div class="card" style="margin-bottom:8px; opacity:0.6;">
                 <div style="display:flex; align-items:center; gap:10px;">
-                  <span style="font-size:20px;">${p.avatar}</span>
-                  <div style="flex:1;">${esc(p.name)}</div>
-                  <div style="font-family:'Fraunces',serif; font-weight:900; color:${(p.score||0)<0?'var(--accent)':'var(--gold)'};">${p.score||0}</div>
+                  <span style="font-size:20px;">${info.avatar}</span>
+                  <div style="flex:1;">${esc(info.name)}</div>
+                  <div style="font-family:'Fraunces',serif; font-weight:900; color:${sc<0?'var(--accent)':'var(--gold)'};">${sc}</div>
                 </div>
               </div>
-            `).join('')}
+            `;}).join('')}
           </div>
         ` : ''}
         ${state.isHost ? `
@@ -2214,6 +2637,88 @@ function viewChatWidget(){
       <div class="chat-input-row">
         <input class="input" id="chat-input" placeholder="Повідомлення..." value="${esc(state.chatInputLocal || '')}" autocomplete="off" maxlength="300">
         <button class="btn btn-gold btn-sm" data-action="send-chat" style="white-space:nowrap;">${icon('send', 16)}</button>
+      </div>
+    </div>
+  `;
+}
+
+// ============== STATS SCREEN ==============
+function viewStats(){
+  const prof = state.myProfile;
+  const unlocked = prof?.achievements || {};
+  const unlockedCount = Object.keys(unlocked).length;
+  const acc = (prof && (prof.correct + prof.wrong) > 0)
+    ? Math.round((prof.correct / (prof.correct + prof.wrong)) * 100) : 0;
+
+  const stat = (label, value, accent) => `
+    <div class="card" style="text-align:center; padding:16px 8px;">
+      <div style="font-family:'Fraunces',serif; font-weight:900; font-size:28px; color:${accent || 'var(--gold)'};">${value}</div>
+      <div style="font-size:11px; color:var(--ink-dim); margin-top:2px; letter-spacing:0.05em;">${label}</div>
+    </div>`;
+
+  return `
+    <button class="back-btn" data-action="close-stats">${icon('arrowLeft',16)} Назад</button>
+    <div class="container slide-up">
+      <div class="eyebrow">ОСОБИСТА СТАТИСТИКА</div>
+      <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin:8px 0 4px;">
+        ${prof ? `${prof.avatar || '👤'} ${esc(prof.name || 'Гравець')}` : 'Ще нема даних'}
+      </h2>
+      <p style="color:var(--ink-dim); margin-bottom:24px; font-size:13px;">
+        ${prof ? `Зіграно ігор: ${prof.games || 0}` : 'Зіграй хоча б одну гру — тут зʼявиться твоя статистика.'}
+      </p>
+
+      ${prof ? `
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(90px,1fr)); gap:10px; margin-bottom:24px;">
+          ${stat('ПЕРЕМОГ', prof.wins || 0)}
+          ${stat('ІГОР', prof.games || 0, 'var(--ink)')}
+          ${stat('ТОЧНІСТЬ', acc + '%', acc >= 60 ? 'var(--green)' : 'var(--accent)')}
+          ${stat('РЕКОРД', prof.bestScore || 0)}
+          ${stat('ПРАВИЛЬНИХ', prof.correct || 0, 'var(--green)')}
+          ${stat('ПОМИЛОК', prof.wrong || 0, 'var(--accent)')}
+          ${stat('БАЗЕРІВ', prof.buzzes || 0, 'var(--ink)')}
+          ${stat('СВОЇХ ІГОР', prof.ddWins || 0)}
+        </div>
+      ` : ''}
+
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px;">
+        <h3 style="font-family:'Fraunces',serif; font-size:22px; font-weight:700;">Досягнення</h3>
+        <span style="font-size:13px; color:var(--ink-dim);">${unlockedCount} / ${ACHIEVEMENTS.length}</span>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:10px;">
+        ${ACHIEVEMENTS.map(a => {
+          const got = !!unlocked[a.id];
+          return `<div class="card" style="padding:14px; ${got ? 'border-color:rgba(240,180,41,0.45);' : 'opacity:0.45;'}">
+            <div style="font-size:26px; margin-bottom:6px; ${got ? '' : 'filter:grayscale(1);'}">${a.emoji}</div>
+            <div style="font-weight:700; font-size:14px; ${got ? 'color:var(--gold);' : ''}">${esc(a.name)}</div>
+            <div style="font-size:11px; color:var(--ink-dim); margin-top:2px; line-height:1.35;">${esc(a.desc)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+
+      ${state.myHostProfile ? `
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin:32px 0 12px;">
+          <h3 style="font-family:'Fraunces',serif; font-size:22px; font-weight:700;">🎙 Як ведучий</h3>
+          <span style="font-size:13px; color:var(--ink-dim);">${Object.keys(state.myHostProfile.achievements||{}).length} / ${HOST_ACHIEVEMENTS.length}</span>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(90px,1fr)); gap:10px; margin-bottom:16px;">
+          ${stat('ПРОВЕДЕНО', state.myHostProfile.gamesHosted || 0)}
+          ${stat('ПИТАНЬ', state.myHostProfile.questionsAsked || 0, 'var(--ink)')}
+          ${stat('МАКС ГРАВЦІВ', state.myHostProfile.maxPlayers || 0, 'var(--ink)')}
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:10px;">
+          ${HOST_ACHIEVEMENTS.map(a => {
+            const got = !!(state.myHostProfile.achievements||{})[a.id];
+            return `<div class="card" style="padding:14px; ${got ? 'border-color:rgba(240,180,41,0.45);' : 'opacity:0.45;'}">
+              <div style="font-size:26px; margin-bottom:6px; ${got ? '' : 'filter:grayscale(1);'}">${a.emoji}</div>
+              <div style="font-weight:700; font-size:14px; ${got ? 'color:var(--gold);' : ''}">${esc(a.name)}</div>
+              <div style="font-size:11px; color:var(--ink-dim); margin-top:2px; line-height:1.35;">${esc(a.desc)}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      ` : ''}
+
+      <div class="info-text" style="margin-top:24px;">
+        💡 Статистика зберігається для цього браузера. З іншого пристрою буде окрема.
       </div>
     </div>
   `;
@@ -2281,9 +2786,14 @@ function viewFormatHelpModal(){
             <b style="color:var(--ink);">Перелік у стовпчик:</b> щоб у питанні чи відповіді щось було з нового рядка, напиши <code style="background:var(--soft); padding:1px 5px; border-radius:3px;">\\n</code> там де треба перенос. У <b>.docx</b> можна просто писати з нового рядка в тій самій клітинці.
             <br><br>
             <b style="color:var(--ink);">Пояснення до відповіді:</b> після відповіді постав <code style="background:var(--soft); padding:1px 5px; border-radius:3px;">//</code> і допиши пояснення — воно покажеться окремо під відповіддю.
+            <br><br>
+            <b style="color:var(--ink);">Відео з YouTube:</b> встав у текст питання <code style="background:var(--soft); padding:1px 5px; border-radius:3px;">[yt:ПОСИЛАННЯ 15-45]</code> — програвач зʼявиться в питанні, а числа задають з якої по яку секунду грати (необовʼязково).
+            <br><br>
+            <b style="color:var(--ink);">Аудіо:</b> прикріплюється кнопкою біля питання вже після завантаження пака.
           </div>
           <div style="background:var(--soft); padding:10px 14px; border-radius:8px; font-family:ui-monospace,monospace; font-size:13px; margin-bottom:16px; white-space:pre-wrap;">600 | Назви три кольори:\\nЧервоний\\nЗелений\\nСиній | будь-що
-400 | Столиця Австралії? | Канберра // не Сідней, як часто думають</div>
+400 | Столиця Австралії? | Канберра // не Сідней, як часто думають
+800 | Що це за пісня? [yt:https://youtu.be/dQw4w9WgXcQ 15-40] | Never Gonna Give You Up</div>
 
           <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">4. Картинки (тільки .docx)</div>
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px; line-height:1.6;">
@@ -2452,6 +2962,94 @@ function attachListeners(){
     state.finalAnswerLocal = e.target.value;
     updateFinalSubmitButton();
   });
+  // Audio attach input
+  const audioIn = document.getElementById('audio-input');
+  if (audioIn && !audioIn._bound) {
+    audioIn._bound = true;
+    audioIn.addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f || !state.audioTarget) return;
+      const MAX = 260_000; // ~260KB of base64
+      if (f.size > 400_000) {
+        state.setupErr = 'Аудіофайл завеликий (максимум ~300 КБ, це приблизно 15-20 секунд). Запиши коротше.';
+        render(true); return;
+      }
+      try {
+        const dataUrl = await new Promise((res, rej) => {
+          const rd = new FileReader();
+          rd.onload = () => res(rd.result);
+          rd.onerror = () => rej(new Error('read failed'));
+          rd.readAsDataURL(f);
+        });
+        if (dataUrl.length > MAX * 1.4) {
+          state.setupErr = 'Аудіо завелике після кодування. Спробуй коротший запис.';
+          render(true); return;
+        }
+        const { ci, qi } = state.audioTarget;
+        const pack = state.setupFilePack || state.setupAiPreview || state.setupManualPack;
+        if (pack?.categories?.[ci]?.questions?.[qi]) {
+          pack.categories[ci].questions[qi].audio = dataUrl;
+          state.setupErr = '';
+        }
+        state.audioTarget = null;
+        render(true);
+      } catch (err) {
+        state.setupErr = 'Не вдалося прочитати аудіофайл';
+        render(true);
+      }
+    });
+  }
+
+  // Video attach input
+  const videoIn = document.getElementById('video-input');
+  if (videoIn && !videoIn._bound) {
+    videoIn._bound = true;
+    videoIn.addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f || !state.videoTarget) return;
+      if (f.size > 2_000_000) {
+        state.setupErr = `Відео завелике (${Math.round(f.size/1024/1024*10)/10} МБ). Ліміт ~2 МБ — це кілька секунд. Для довших відео краще залий на YouTube і встав [yt:посилання] у текст питання.`;
+        render(true); return;
+      }
+      try {
+        const dataUrl = await new Promise((res, rej) => {
+          const rd = new FileReader();
+          rd.onload = () => res(rd.result);
+          rd.onerror = () => rej(new Error('read failed'));
+          rd.readAsDataURL(f);
+        });
+        const { ci, qi } = state.videoTarget;
+        const pack = state.setupFilePack || state.setupAiPreview || state.setupManualPack;
+        if (pack?.categories?.[ci]?.questions?.[qi]) {
+          pack.categories[ci].questions[qi].video = dataUrl;
+          state.setupErr = '';
+        }
+        state.videoTarget = null;
+        render(true);
+      } catch (err) {
+        state.setupErr = 'Не вдалося прочитати відеофайл';
+        render(true);
+      }
+    });
+  }
+
+  // Daily Double bet input
+  const ddInp = document.getElementById('dd-bid');
+  if (ddInp) {
+    ddInp.addEventListener('input', e => {
+      const v = parseInt(e.target.value, 10);
+      state.ddBidLocal = isNaN(v) ? 0 : v;
+      const r0 = state.room;
+      const max = r0 ? ddMaxBid(r0) : 0;
+      const ok = Number.isInteger(state.ddBidLocal) && state.ddBidLocal >= 0 && state.ddBidLocal <= max;
+      const err = document.getElementById('dd-bid-err');
+      const btn = document.getElementById('dd-submit-btn');
+      if (err) err.style.display = ok ? 'none' : 'block';
+      if (btn) { if (ok) btn.removeAttribute('disabled'); else btn.setAttribute('disabled',''); }
+    });
+    ddInp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitDDBid(); } });
+  }
+
   // Chat input
   const chatInput = document.getElementById('chat-input');
   if (chatInput) {
@@ -2538,6 +3136,36 @@ async function handleAction(e){
     case 'set-anti-spam':
       state.setupAntiSpam = el.dataset.anti === '1';
       render(true); break;
+    case 'set-team-mode':
+      state.setupTeamMode = el.dataset.team === '1';
+      if (state.isHost && state.code) {
+        update(ref(db, `rooms/${state.code}`), {
+          teamModeConfig: state.setupTeamMode,
+          teamCountConfig: state.setupTeamMode ? (state.setupTeamCount || 2) : null,
+        }).catch(()=>{});
+      }
+      render(true); break;
+    case 'set-dd':
+      state.setupDailyDouble = el.dataset.dd === '1';
+      render(true); break;
+    case 'set-dd-count':
+      state.setupDDCount = parseInt(el.dataset.count, 10);
+      render(true); break;
+    case 'submit-dd-bid':
+      await submitDDBid();
+      break;
+    case 'set-team-count':
+      state.setupTeamCount = parseInt(el.dataset.count, 10);
+      if (state.isHost && state.code && state.setupTeamMode) {
+        update(ref(db, `rooms/${state.code}`), { teamCountConfig: state.setupTeamCount }).catch(()=>{});
+      }
+      render(true); break;
+    case 'assign-team':
+      await assignPlayerTeam(el.dataset.player, parseInt(el.dataset.team, 10));
+      break;
+    case 'auto-assign-teams':
+      await autoAssignTeams();
+      break;
     case 'set-countdown-sec':
       state.setupCountdownSeconds = parseInt(el.dataset.sec, 10);
       render(true); break;
@@ -2643,6 +3271,51 @@ async function handleAction(e){
         render(true);
       }
       break;
+    case 'play-audio-all': await playAudioForAll(); break;
+    case 'stop-audio-all': await stopAudioForAll(); break;
+    case 'play-audio-local': {
+      const a = document.getElementById('q-audio');
+      if (a) { try { a.currentTime = 0; a.play(); state.audioBlocked = false; render(true); } catch(_){} }
+      break;
+    }
+    case 'attach-video': {
+      state.videoTarget = { ci: parseInt(el.dataset.ci,10), qi: parseInt(el.dataset.qi,10) };
+      const vi = document.getElementById('video-input');
+      if (vi) { vi.value = ''; vi.click(); }
+      break;
+    }
+    case 'remove-video': {
+      const ci = parseInt(el.dataset.ci,10), qi = parseInt(el.dataset.qi,10);
+      const pack = state.setupFilePack || state.setupAiPreview || state.setupManualPack;
+      if (pack?.categories?.[ci]?.questions?.[qi]) {
+        delete pack.categories[ci].questions[qi].video;
+        render(true);
+      }
+      break;
+    }
+    case 'attach-audio': {
+      state.audioTarget = { ci: parseInt(el.dataset.ci,10), qi: parseInt(el.dataset.qi,10) };
+      const ai = document.getElementById('audio-input');
+      if (ai) { ai.value = ''; ai.click(); }
+      break;
+    }
+    case 'remove-audio': {
+      const ci = parseInt(el.dataset.ci,10), qi = parseInt(el.dataset.qi,10);
+      const pack = state.setupFilePack || state.setupAiPreview || state.setupManualPack;
+      if (pack?.categories?.[ci]?.questions?.[qi]) {
+        delete pack.categories[ci].questions[qi].audio;
+        render(true);
+      }
+      break;
+    }
+    case 'open-stats':
+      state.showStats = true;
+      state.myProfile = await loadMyProfile();
+      state.myHostProfile = await loadMyHostProfile();
+      render(true); break;
+    case 'close-stats':
+      state.showStats = false;
+      render(true); break;
     case 'show-changelog':
       state.showChangelog = true;
       render(true); break;
@@ -2852,6 +3525,8 @@ function attachRoomListener(code){
     const cellChanged = JSON.stringify(prevCell) !== JSON.stringify(newCell);
     if (cellChanged) { state.lastBuzzAttempt = 0; state.buzzCooldownUntil = 0; }
     state.room = data;
+    // Record this game into the player's profile once the results are shown
+    if (data.status === 'results') saveGameResult();
     // Sync screen with status (only for the standard board/question/results flow;
     // round_done/final_* are rendered by status check directly)
     if (!state.subScreen) {
@@ -2979,6 +3654,19 @@ async function startGame(pack){
     }
   }
 
+  // Daily Double: pick random hidden cells for this round (avoid the cheapest row)
+  let ddCells = null;
+  if (state.setupDailyDouble) {
+    const count = state.setupDDCount || 1;
+    const pool = [];
+    for (let c = 0; c < CATS_PER_BOARD; c++) {
+      for (let v = 1; v < QS_PER_CAT; v++) pool.push(`${c}-${v}`); // skip row 0 (cheapest)
+    }
+    const picked = pool.sort(() => Math.random() - 0.5).slice(0, count);
+    ddCells = {};
+    picked.forEach(k => { ddCells[k] = true; });
+  }
+
   // Pick first picker — top scorer (or random for first round)
   const nonHost = playerList.filter(p => p.id !== r.hostId);
   let firstPicker;
@@ -2995,7 +3683,7 @@ async function startGame(pack){
       name: c.name,
       questions: c.questions.slice(0, QS_PER_CAT).map((q, i) => ({
         value: VALUES[i] * valueMult,
-        q: q.q, a: q.a, explanation: q.explanation || null, image: q.image || null, answerImage: q.answerImage || null,
+        q: q.q, a: q.a, explanation: q.explanation || null, image: q.image || null, answerImage: q.answerImage || null, audio: q.audio || null, video: q.video || null, youtube: q.youtube || null,
       }))
     }))
   };
@@ -3010,9 +3698,14 @@ async function startGame(pack){
     currentPicker: firstPicker ? firstPicker.id : null,
     revealAnswer: false,
     currentRound: roundNum,
+    dailyDoubles: ddCells,
+    ddPlayer: null, ddBid: null, ddBidSubmitted: null,
     players
   };
   if (isFirstRound) {
+    patch.gameId = `${state.code}-${Date.now()}`;
+    patch.gameStartedAt = Date.now();
+    patch.gameStats = null;
     patch.roundsTotal = roundsTotal;
     patch.finalQ = null;
     patch.finalBids = null;
@@ -3021,6 +3714,16 @@ async function startGame(pack){
     patch.answerSecondsConfig = state.setupAnswerSeconds || ANSWER_SECONDS;
     patch.buzzModeConfig = state.setupBuzzMode || 'instant';
     patch.antiSpamConfig = !!state.setupAntiSpam;
+    patch.teamModeConfig = !!state.setupTeamMode;
+    patch.teamCountConfig = state.setupTeamMode ? (state.setupTeamCount || 2) : null;
+    if (state.setupTeamMode) {
+      // Start all teams at zero
+      const ts = {};
+      for (let i = 1; i <= (state.setupTeamCount || 2); i++) ts[i] = 0;
+      patch.teamScores = ts;
+    } else {
+      patch.teamScores = null;
+    }
     patch.countdownSecondsConfig = state.setupCountdownSeconds || 5;
   }
   await update(ref(db, `rooms/${state.code}`), patch);
@@ -3063,6 +3766,7 @@ async function pickCell(ci, qi){
   if (r.usedCells && r.usedCells[`${ci}-${qi}`]) return;
   const now = serverNow();
   const mode = r.buzzModeConfig || (r.manualBuzzConfig ? 'manual' : 'instant');
+  const isDD = !!(r.dailyDoubles && r.dailyDoubles[`${ci}-${qi}`]);
   const patch = {
     currentCell: {ci, qi},
     buzzedPlayer: null,
@@ -3074,6 +3778,17 @@ async function pickCell(ci, qi){
     phaseStartedAt: now,
     status: 'question'
   };
+
+  if (isDD) {
+    // Daily Double: the current picker bets their own points, no buzzer race
+    patch.questionState = 'dd_bid';
+    patch.ddPlayer = r.currentPicker || null;
+    patch.ddBid = null;
+    patch.ddBidSubmitted = false;
+    patch.buzzPhaseDeadline = null;
+    await update(ref(db, `rooms/${state.code}`), patch);
+    return;
+  }
   if (mode === 'manual') {
     // Host presses "open buzzer" when ready
     patch.questionState = 'reading';
@@ -3098,12 +3813,72 @@ async function openBuzzAfterCountdown(){
   if (!fresh) return;
   if (fresh.questionState !== 'countdown') return;
   if (fresh.countdownDeadline && serverNow() < fresh.countdownDeadline) return;
+  if (fresh.phaseStartedAt && serverNow() - fresh.phaseStartedAt < 800) return;
   const now = serverNow();
   await update(ref(db, `rooms/${state.code}`), {
     questionState: 'buzzing',
     buzzPhaseDeadline: now + buzzSec(fresh) * 1000,
     countdownDeadline: null,
+    phaseStartedAt: now,
   });
+}
+
+// ============== SYNCHRONISED AUDIO ==============
+// Host schedules playback slightly in the future so every device starts together.
+async function playAudioForAll(){
+  if (!state.isHost || !state.code) return;
+  const at = serverNow() + 700; // small lead so slower devices catch up
+  await update(ref(db, `rooms/${state.code}`), {
+    audioToken: genId(),
+    audioPlayAt: at,
+    audioPlaying: true,
+  });
+}
+
+async function stopAudioForAll(){
+  if (!state.isHost || !state.code) return;
+  await update(ref(db, `rooms/${state.code}`), {
+    audioPlaying: false,
+    audioStopToken: genId(),
+  });
+}
+
+// Runs on every tick: starts/stops the local <audio> to match the room state.
+function syncAudioPlayback(){
+  const r = state.room;
+  const el = document.getElementById('q-audio');
+  if (!r || !el) return;
+
+  // Stop requested
+  if (r.audioStopToken && state.lastAudioStopToken !== r.audioStopToken) {
+    state.lastAudioStopToken = r.audioStopToken;
+    try { el.pause(); el.currentTime = 0; } catch (_) {}
+    state.audioBlocked = false;
+    return;
+  }
+  // New play request
+  if (r.audioToken && state.lastAudioToken !== r.audioToken) {
+    state.lastAudioToken = r.audioToken;
+    state.audioPending = true;
+    state.audioBlocked = false;
+  }
+  if (state.audioPending && r.audioPlayAt && serverNow() >= r.audioPlayAt) {
+    state.audioPending = false;
+    try {
+      el.currentTime = 0;
+      const pr = el.play();
+      if (pr && pr.catch) {
+        pr.catch(() => {
+          // Browser blocked autoplay — show a manual button instead
+          state.audioBlocked = true;
+          render(true);
+        });
+      }
+    } catch (_) {
+      state.audioBlocked = true;
+      render(true);
+    }
+  }
 }
 
 async function openBuzz(){
@@ -3113,6 +3888,7 @@ async function openBuzz(){
   await update(ref(db, `rooms/${state.code}`), {
     questionState: 'buzzing',
     buzzPhaseDeadline: now + buzzSec(r) * 1000,
+    phaseStartedAt: now,
   });
 }
 
@@ -3137,13 +3913,263 @@ async function resyncRoom(){
   }
 }
 
+// True if this player (or, in team mode, their whole team) already attempted
+function hasAttempted(r, pid){
+  const att = r.attemptedBy || [];
+  if (att.includes(pid)) return true;
+  if (!isTeamMode(r)) return false;
+  const myTeam = r.players?.[pid]?.teamId;
+  if (!myTeam) return false;
+  return att.some(id => r.players?.[id]?.teamId === myTeam);
+}
+
+// ============== STATS / HISTORY / ACHIEVEMENTS ==============
+const ACHIEVEMENTS = [
+  { id: 'first_game',   emoji: '🎬', name: 'Дебют',            desc: 'Зіграти першу гру' },
+  { id: 'first_win',    emoji: '🏆', name: 'Перша перемога',   desc: 'Виграти гру' },
+  { id: 'win_3',        emoji: '👑', name: 'Чемпіон',          desc: 'Виграти 3 гри' },
+  { id: 'win_10',       emoji: '🌟', name: 'Легенда',          desc: 'Виграти 10 ігор' },
+  { id: 'games_10',     emoji: '🎲', name: 'Завсідник',        desc: 'Зіграти 10 ігор' },
+  { id: 'sharp',        emoji: '🎯', name: 'Влучний',          desc: '10 правильних відповідей поспіль за гру' },
+  { id: 'no_miss',      emoji: '💎', name: 'Бездоганний',      desc: 'Гра без жодної помилки (мін. 5 відповідей)' },
+  { id: 'fast_finger',  emoji: '⚡', name: 'Швидкий палець',   desc: 'Виграти базер 15 разів за гру' },
+  { id: 'big_score',    emoji: '💰', name: 'Багатій',          desc: 'Набрати 10000+ за гру' },
+  { id: 'comeback',     emoji: '🔥', name: 'Камбек',           desc: 'Виграти, побувавши в мінусі' },
+  { id: 'dd_master',    emoji: '🎰', name: 'Ризикова',         desc: 'Виграти «Свою гру» 3 рази' },
+  { id: 'final_boss',   emoji: '🧠', name: 'Фінальний бос',    desc: 'Правильно відповісти у фіналі' },
+  { id: 'runner_up',    emoji: '🥈', name: 'Майже',             desc: 'Зайняти друге місце' },
+  { id: 'streak_3',     emoji: '🔗', name: 'Серія',             desc: 'Виграти 3 гри поспіль' },
+  { id: 'all_in',       emoji: '💥', name: 'Ва-банк',           desc: 'Поставити всі бали у «Своїй грі» і виграти' },
+  { id: 'ice_cold',     emoji: '🧊', name: 'Холоднокровний',    desc: 'Виграти фінал, поставивши все' },
+  { id: 'buzz_50',      emoji: '🔔', name: 'Дзвіночок',         desc: '50 виграних базерів за весь час' },
+  { id: 'correct_100',  emoji: '📚', name: 'Ерудит',            desc: '100 правильних відповідей за весь час' },
+  { id: 'team_player',  emoji: '🤝', name: 'Командний гравець', desc: 'Виграти в командному режимі' },
+  { id: 'veteran',      emoji: '🎖', name: 'Ветеран',           desc: 'Зіграти 25 ігор' },
+];
+
+// Achievements for the host — a separate track so hosting also feels rewarding
+const HOST_ACHIEVEMENTS = [
+  { id: 'h_first',    emoji: '🎙', name: 'Дебют ведучого',  desc: 'Провести першу гру' },
+  { id: 'h_5',        emoji: '🎤', name: 'Конферансьє',     desc: 'Провести 5 ігор' },
+  { id: 'h_20',       emoji: '🎪', name: 'Шоумен',          desc: 'Провести 20 ігор' },
+  { id: 'h_crowd',    emoji: '👥', name: 'Аншлаг',          desc: 'Провести гру з 8+ гравцями' },
+  { id: 'h_marathon', emoji: '🌙', name: 'Марафонець',      desc: 'Провести гру з 3 раундів' },
+  { id: 'h_teams',    emoji: '⚔️', name: 'Тренер',          desc: 'Провести командну гру' },
+  { id: 'h_media',    emoji: '🎬', name: 'Продюсер',        desc: 'Провести гру з аудіо або відео' },
+  { id: 'h_100q',     emoji: '📋', name: 'Сто питань',      desc: 'Задати 100 питань за весь час' },
+];
+
+async function loadMyProfile(){
+  if (!state.myId || !db) return null;
+  try {
+    const snap = await get(ref(db, `users/${state.myId}/profile`));
+    return snap.exists() ? snap.val() : null;
+  } catch (_) { return null; }
+}
+
+async function loadMyHostProfile(){
+  if (!state.myId || !db) return null;
+  try {
+    const snap = await get(ref(db, `users/${state.myId}/hostProfile`));
+    return snap.exists() ? snap.val() : null;
+  } catch (_) { return null; }
+}
+
+// Ведучий теж отримує свій прогрес — окрема гілка профілю
+async function saveHostResult(){
+  const r = state.room;
+  if (!r || !state.myId || !r.gameId) return;
+  if (state.savedGameId === r.gameId) return;
+  state.savedGameId = r.gameId;
+  try {
+    const already = await get(ref(db, `users/${state.myId}/hostHistory/${r.gameId}`));
+    if (already.exists()) return;
+
+    const playersCount = Object.values(r.players || {}).filter(p => p.id !== r.hostId).length;
+    const questionsAsked = Object.keys(r.usedCells || {}).length;
+    const hadMedia = !!(r.pack?.categories || []).some(c =>
+      (c.questions || []).some(q => q.audio || q.video || q.youtube));
+
+    const snap = await get(ref(db, `users/${state.myId}/hostProfile`));
+    const hp = snap.exists() ? snap.val() : {
+      gamesHosted: 0, questionsAsked: 0, maxPlayers: 0, achievements: {},
+    };
+    hp.gamesHosted = (hp.gamesHosted || 0) + 1;
+    hp.questionsAsked = (hp.questionsAsked || 0) + questionsAsked;
+    hp.maxPlayers = Math.max(hp.maxPlayers || 0, playersCount);
+    hp.lastHostedAt = Date.now();
+
+    const ach = { ...(hp.achievements || {}) };
+    const before = hp.achievements || {};
+    const unlock = (id) => { if (!ach[id]) ach[id] = Date.now(); };
+    if (hp.gamesHosted >= 1) unlock('h_first');
+    if (hp.gamesHosted >= 5) unlock('h_5');
+    if (hp.gamesHosted >= 20) unlock('h_20');
+    if (playersCount >= 8) unlock('h_crowd');
+    if ((r.roundsTotal || 1) >= 3) unlock('h_marathon');
+    if (isTeamMode(r)) unlock('h_teams');
+    if (hadMedia) unlock('h_media');
+    if (hp.questionsAsked >= 100) unlock('h_100q');
+    const fresh = Object.keys(ach).filter(k => !before[k]);
+    hp.achievements = ach;
+
+    await set(ref(db, `users/${state.myId}/hostHistory/${r.gameId}`), {
+      gameId: r.gameId, playedAt: Date.now(), players: playersCount,
+      questionsAsked, rounds: r.roundsTotal || 1, teamMode: isTeamMode(r),
+    });
+    await set(ref(db, `users/${state.myId}/hostProfile`), hp);
+    if (fresh.length) { state.newAchievements = fresh; render(true); }
+  } catch (e) {
+    console.error('[saveHostResult]', e);
+  }
+}
+
+// Записує результат гри в особистий профіль. Ідемпотентно за gameId.
+async function saveGameResult(){
+  const r = state.room;
+  if (!r || !state.myId) return;
+  if (!r.gameId) return;
+  if (state.isHost) return saveHostResult();
+  if (state.savedGameId === r.gameId) return;      // already saved this session
+  state.savedGameId = r.gameId;
+
+  try {
+    const already = await get(ref(db, `users/${state.myId}/history/${r.gameId}`));
+    if (already.exists()) return;
+
+    const me = r.players?.[state.myId];
+    if (!me) return;
+    const gs = r.gameStats?.[state.myId] || {};
+    const teamMode = isTeamMode(r);
+
+    // Did I win?
+    let won = false, myFinalScore = me.score || 0, place = 0;
+    if (teamMode) {
+      const ranked = teamsOf(r).map(t => ({ id: t.id, sc: teamScore(r, t.id) })).sort((a,b) => b.sc - a.sc);
+      won = ranked.length > 0 && ranked[0].id === me.teamId;
+      myFinalScore = me.teamId ? teamScore(r, me.teamId) : myFinalScore;
+      place = ranked.findIndex(t => t.id === me.teamId) + 1;
+    } else {
+      const ranked = getPlayerList(r).filter(p => p.id !== r.hostId).sort((a,b) => (b.score||0) - (a.score||0));
+      won = ranked.length > 0 && ranked[0].id === state.myId;
+      place = ranked.findIndex(p => p.id === state.myId) + 1;
+    }
+
+    const entry = {
+      gameId: r.gameId,
+      playedAt: Date.now(),
+      score: myFinalScore,
+      won, place,
+      teamMode,
+      correct: gs.correct || 0,
+      wrong: gs.wrong || 0,
+      buzzes: gs.buzzes || 0,
+      ddWins: gs.ddWins || 0,
+      finalCorrect: !!(r.finalJudgement && r.finalJudgement[teamMode ? me.teamId : state.myId] === 'correct'),
+      wasNegative: !!gs.wasNegative,
+      players: Object.values(r.players||{}).filter(p => p.id !== r.hostId).length,
+    };
+
+    // Aggregate profile
+    const prof = (await loadMyProfile()) || {
+      name: me.name, avatar: me.avatar,
+      games: 0, wins: 0, totalScore: 0, bestScore: 0,
+      correct: 0, wrong: 0, buzzes: 0, ddWins: 0, finalWins: 0,
+      achievements: {},
+    };
+    prof.name = me.name; prof.avatar = me.avatar;
+    prof.games = (prof.games || 0) + 1;
+    prof.wins = (prof.wins || 0) + (won ? 1 : 0);
+    prof.totalScore = (prof.totalScore || 0) + myFinalScore;
+    prof.bestScore = Math.max(prof.bestScore || 0, myFinalScore);
+    prof.correct = (prof.correct || 0) + entry.correct;
+    prof.wrong = (prof.wrong || 0) + entry.wrong;
+    prof.buzzes = (prof.buzzes || 0) + entry.buzzes;
+    prof.ddWins = (prof.ddWins || 0) + entry.ddWins;
+    prof.finalWins = (prof.finalWins || 0) + (entry.finalCorrect ? 1 : 0);
+    prof.lastPlayedAt = Date.now();
+
+    // Unlock achievements
+    const ach = { ...(prof.achievements || {}) };
+    const unlock = (id) => { if (!ach[id]) ach[id] = Date.now(); };
+    if (prof.games >= 1) unlock('first_game');
+    if (prof.wins >= 1) unlock('first_win');
+    if (prof.wins >= 3) unlock('win_3');
+    if (prof.wins >= 10) unlock('win_10');
+    if (prof.games >= 10) unlock('games_10');
+    if (entry.correct >= 10) unlock('sharp');
+    if (entry.wrong === 0 && entry.correct >= 5) unlock('no_miss');
+    if (entry.buzzes >= 15) unlock('fast_finger');
+    if (myFinalScore >= 10000) unlock('big_score');
+    if (won && entry.wasNegative) unlock('comeback');
+    if (prof.ddWins >= 3) unlock('dd_master');
+    if (entry.finalCorrect) unlock('final_boss');
+    if (place === 2) unlock('runner_up');
+    if (prof.buzzes >= 50) unlock('buzz_50');
+    if (prof.correct >= 100) unlock('correct_100');
+    if (won && teamMode) unlock('team_player');
+    if (prof.games >= 25) unlock('veteran');
+    // Win streak
+    prof.streak = won ? ((prof.streak || 0) + 1) : 0;
+    if (prof.streak >= 3) unlock('streak_3');
+    // Which ones are brand new (for the "unlocked!" toast)
+    const before = prof.achievements || {};
+    const fresh = Object.keys(ach).filter(k => !before[k]);
+    prof.achievements = ach;
+
+    await set(ref(db, `users/${state.myId}/history/${r.gameId}`), entry);
+    await set(ref(db, `users/${state.myId}/profile`), prof);
+
+    if (fresh.length) {
+      state.newAchievements = fresh;
+      render(true);
+    }
+  } catch (e) {
+    console.error('[saveGameResult]', e);
+  }
+}
+
+// ============== DAILY DOUBLE ==============
+// Max a player may bet: their own score, but never below the board's top value
+function ddMaxBid(r){
+  const round = (typeof r.currentRound === 'number') ? r.currentRound : 1;
+  const floor = 1000 * round;
+  let own = 0;
+  if (isTeamMode(r)) {
+    const t = r.players?.[r.ddPlayer]?.teamId;
+    own = t ? teamScore(r, t) : 0;
+  } else {
+    own = r.players?.[r.ddPlayer]?.score || 0;
+  }
+  return Math.max(floor, own);
+}
+
+async function submitDDBid(){
+  const r = state.room;
+  if (!r) return;
+  if (r.questionState !== 'dd_bid') return;
+  // Only the chosen player (or the host on their behalf) may set the bet
+  if (!state.isHost && state.myId !== r.ddPlayer) return;
+  const max = ddMaxBid(r);
+  const bid = state.ddBidLocal;
+  if (!Number.isInteger(bid) || bid < 0 || bid > max) return;
+  const now = serverNow();
+  await update(ref(db, `rooms/${state.code}`), {
+    ddBid: bid,
+    ddBidSubmitted: true,
+    questionState: 'dd_answer',
+    answerPhaseDeadline: now + answerSec(r) * 1000,
+    phaseStartedAt: now,
+  });
+}
+
 async function buzz(){
   if (state.isHost) return;
   if (!state.myId) return;
   if (!state.code) return;
   const r = state.room;
   if (!r || r.status !== 'question') return;
-  if ((r.attemptedBy||[]).includes(state.myId)) return;
+  if (hasAttempted(r, state.myId)) return;
 
   // Anti-spam (hardcore): every press counts toward the cooldown — even presses
   // made BEFORE the buzzer opens. Pressing early = you're locked out for 1s, so
@@ -3173,7 +4199,7 @@ async function buzz(){
   if (fresh.status !== 'question') return;
   if (fresh.questionState !== 'buzzing') return;
   if (fresh.buzzedPlayer) return;
-  if ((fresh.attemptedBy||[]).includes(state.myId)) return;
+  if (hasAttempted(fresh, state.myId)) return;
   // NOTE: we deliberately do NOT reject based on Date.now() vs buzzPhaseDeadline.
   // A player's local clock can be skewed minutes ahead, which would make every
   // buzz look "expired" and silently block them. The host closes the question on
@@ -3198,10 +4224,14 @@ async function buzz(){
     return;
   }
   // We won the buzzer — set the answering phase fields
+  await update(ref(db, `rooms/${state.code}/gameStats/${state.myId}`), {
+    buzzes: ((fresh.gameStats?.[state.myId]?.buzzes) || 0) + 1
+  }).catch(()=>{});
   await update(ref(db, `rooms/${state.code}`), {
     questionState: 'answering',
     buzzPhaseRemainingMs: remaining,
     answerPhaseDeadline: now + answerSec(fresh) * 1000,
+    phaseStartedAt: now,
   });
 }
 
@@ -3217,17 +4247,50 @@ async function judge(correctStr){
   if (!state.isHost) return;
   // Read fresh state so buzzPhaseRemainingMs / attemptedBy are accurate
   const r = await getRoom(state.code);
-  if (!r || !r.buzzedPlayer || !r.currentCell) return;
+  if (!r || !r.currentCell) return;
+  if (r.questionState !== 'dd_answer' && !r.buzzedPlayer) return;
   const {ci, qi} = r.currentCell;
   const q = r.pack.categories[ci].questions[qi];
   const buzzedId = r.buzzedPlayer;
   const players = { ...r.players };
   const patch = {};
+  const teamMode = isTeamMode(r);
+  // Daily Double: the value at stake is the player's bet, and the question ends
+  // after this single verdict (no other team/player gets a turn).
+  const isDD = (r.questionState === 'dd_answer');
+  const stake = isDD ? (typeof r.ddBid === 'number' ? r.ddBid : 0) : q.value;
+  const scorerId = isDD ? r.ddPlayer : buzzedId;
+  const myTeam = players[scorerId]?.teamId || null;
+  const teamScores = { ...(r.teamScores || {}) };
+  // In team mode a question is exhausted when every TEAM has attempted
+  const countUnits = () => {
+    if (!teamMode) return Object.values(r.players||{}).filter(p => p.id !== r.hostId).length;
+    const n = r.teamCountConfig || 2;
+    // only count teams that actually have players
+    let live = 0;
+    for (let i = 1; i <= n; i++) if (playersOfTeam(r, i).length > 0) live++;
+    return live || 1;
+  };
+  const attemptedUnits = (attArr) => {
+    if (!teamMode) return attArr.length;
+    const teams = new Set();
+    attArr.forEach(pid => { const t = players[pid]?.teamId; if (t) teams.add(t); });
+    return teams.size;
+  };
 
   if (correctStr === '1') {
-    players[buzzedId] = { ...players[buzzedId], score: (players[buzzedId].score||0) + q.value };
-    patch.usedCells = { ...(r.usedCells||{}), [`${ci}-${qi}`]: true };
-    patch.currentPicker = buzzedId;
+    if (teamMode && myTeam) {
+      teamScores[myTeam] = (teamScores[myTeam] || 0) + stake;
+      patch.teamScores = teamScores;
+    }
+    if (scorerId && players[scorerId]) players[scorerId] = { ...players[scorerId], score: (players[scorerId].score||0) + stake };
+    patch[`usedCells/${ci}-${qi}`] = true;
+    patch.currentPicker = scorerId || buzzedId;
+    if (scorerId) {
+      patch[`gameStats/${scorerId}/correct`] = ((r.gameStats?.[scorerId]?.correct) || 0) + 1;
+      patch[`gameStats/${scorerId}/earned`] = ((r.gameStats?.[scorerId]?.earned) || 0) + stake;
+      if (isDD) patch[`gameStats/${scorerId}/ddWins`] = ((r.gameStats?.[scorerId]?.ddWins) || 0) + 1;
+    }
     patch.revealAnswer = true;
     patch.questionState = 'closed';
     patch.buzzedPlayer = null;
@@ -3235,14 +4298,35 @@ async function judge(correctStr){
     patch.answerPhaseDeadline = null;
     patch.buzzPhaseRemainingMs = null;
   } else if (correctStr === '0') {
-    players[buzzedId] = { ...players[buzzedId], score: (players[buzzedId].score||0) - q.value };
+    if (teamMode && myTeam) {
+      teamScores[myTeam] = (teamScores[myTeam] || 0) - stake;
+      patch.teamScores = teamScores;
+    }
+    if (scorerId && players[scorerId]) players[scorerId] = { ...players[scorerId], score: (players[scorerId].score||0) - stake };
+    if (scorerId) {
+      patch[`gameStats/${scorerId}/wrong`] = ((r.gameStats?.[scorerId]?.wrong) || 0) + 1;
+      patch[`gameStats/${scorerId}/lost`] = ((r.gameStats?.[scorerId]?.lost) || 0) + stake;
+      if ((players[scorerId]?.score || 0) < 0) patch[`gameStats/${scorerId}/wasNegative`] = true;
+    }
+    if (isDD) {
+      // Daily Double ends immediately regardless of who else is left
+      patch[`usedCells/${ci}-${qi}`] = true;
+      patch.questionState = 'closed';
+      patch.revealAnswer = true;
+      patch.buzzedPlayer = null;
+      patch.buzzPhaseDeadline = null;
+      patch.buzzPhaseRemainingMs = null;
+      patch.answerPhaseDeadline = null;
+      patch.players = players;
+      await update(ref(db, `rooms/${state.code}`), patch);
+      return;
+    }
     const newAttempted = [...(r.attemptedBy||[]), buzzedId];
-    const nonHostCount = Object.values(r.players||{}).filter(p => p.id !== r.hostId).length;
     patch.attemptedBy = newAttempted;
     patch.buzzedPlayer = null;
-    // If everyone has already attempted, close the question
-    if (newAttempted.length >= nonHostCount) {
-      patch.usedCells = { ...(r.usedCells||{}), [`${ci}-${qi}`]: true };
+    // If everyone (or every team) has already attempted, close the question
+    if (attemptedUnits(newAttempted) >= countUnits()) {
+      patch[`usedCells/${ci}-${qi}`] = true;
       patch.questionState = 'closed';
       patch.revealAnswer = true;
       patch.buzzPhaseDeadline = null;
@@ -3254,15 +4338,15 @@ async function judge(correctStr){
       patch.buzzPhaseDeadline = serverNow() + remaining;
       patch.buzzPhaseRemainingMs = null;
       patch.answerPhaseDeadline = null;
+      patch.phaseStartedAt = serverNow();
     }
   } else {
     // "skip" / not counted
     const newAttempted = [...(r.attemptedBy||[]), buzzedId];
-    const nonHostCount = Object.values(r.players||{}).filter(p => p.id !== r.hostId).length;
     patch.attemptedBy = newAttempted;
     patch.buzzedPlayer = null;
-    if (newAttempted.length >= nonHostCount) {
-      patch.usedCells = { ...(r.usedCells||{}), [`${ci}-${qi}`]: true };
+    if (attemptedUnits(newAttempted) >= countUnits()) {
+      patch[`usedCells/${ci}-${qi}`] = true;
       patch.questionState = 'closed';
       patch.revealAnswer = true;
       patch.buzzPhaseDeadline = null;
@@ -3274,6 +4358,7 @@ async function judge(correctStr){
       patch.buzzPhaseDeadline = serverNow() + remaining;
       patch.buzzPhaseRemainingMs = null;
       patch.answerPhaseDeadline = null;
+      patch.phaseStartedAt = serverNow();
     }
   }
   patch.players = players;
@@ -3289,12 +4374,11 @@ async function timeoutBuzzPhase(){
   if (fresh.questionState !== 'buzzing') return;
   if (!fresh.buzzPhaseDeadline || serverNow() < fresh.buzzPhaseDeadline) return;
   // Never auto-close a question that just started (guards against clock races)
-  if (fresh.phaseStartedAt && serverNow() - fresh.phaseStartedAt < 1200) return;
+  if (fresh.phaseStartedAt && serverNow() - fresh.phaseStartedAt < 1500) return;
   if (!fresh.currentCell) return;
   const {ci, qi} = fresh.currentCell;
-  const used = { ...(fresh.usedCells||{}), [`${ci}-${qi}`]: true };
   const patch = {
-    usedCells: used,
+    [`usedCells/${ci}-${qi}`]: true,
     revealAnswer: true,
     questionState: 'closed',
     buzzedPlayer: null,
@@ -3312,8 +4396,36 @@ async function timeoutBuzzPhase(){
 async function timeoutAnswerPhase(){
   const fresh = await getRoom(state.code);
   if (!fresh) return;
-  if (fresh.questionState !== 'answering') return;
+  const ddPhase = (fresh.questionState === 'dd_answer');
+  if (fresh.questionState !== 'answering' && !ddPhase) return;
   if (!fresh.answerPhaseDeadline || serverNow() < fresh.answerPhaseDeadline) return;
+  if (fresh.phaseStartedAt && serverNow() - fresh.phaseStartedAt < 1500) return;
+
+  // Daily Double timeout = wrong answer, question closes immediately
+  if (ddPhase) {
+    const cell = fresh.currentCell; if (!cell) return;
+    const bet = typeof fresh.ddBid === 'number' ? fresh.ddBid : 0;
+    const pl = { ...fresh.players };
+    const sid = fresh.ddPlayer;
+    const tScoresDD = { ...(fresh.teamScores || {}) };
+    if (sid && pl[sid]) pl[sid] = { ...pl[sid], score: (pl[sid].score||0) - bet };
+    if (isTeamMode(fresh)) {
+      const t = pl[sid]?.teamId;
+      if (t) tScoresDD[t] = (tScoresDD[t] || 0) - bet;
+    }
+    await update(ref(db, `rooms/${state.code}`), {
+      players: pl,
+      ...(isTeamMode(fresh) ? { teamScores: tScoresDD } : {}),
+      [`usedCells/${cell.ci}-${cell.qi}`]: true,
+      questionState: 'closed',
+      revealAnswer: true,
+      buzzedPlayer: null,
+      answerPhaseDeadline: null,
+      buzzPhaseDeadline: null,
+      buzzPhaseRemainingMs: null,
+    });
+    return;
+  }
   if (!fresh.buzzedPlayer || !fresh.currentCell) return;
   // Treat as wrong: deduct value, return to buzzing or close if all attempted
   const {ci, qi} = fresh.currentCell;
@@ -3322,13 +4434,33 @@ async function timeoutAnswerPhase(){
   const players = { ...fresh.players };
   players[buzzedId] = { ...players[buzzedId], score: (players[buzzedId].score||0) - q.value };
   const newAttempted = [...(fresh.attemptedBy||[]), buzzedId];
-  const nonHostCount = Object.values(fresh.players||{}).filter(p => p.id !== fresh.hostId).length;
+  // Team mode: deduct from the team and count attempts per team
+  const tMode = isTeamMode(fresh);
+  const tScores = { ...(fresh.teamScores || {}) };
+  const myTeam = players[buzzedId]?.teamId || null;
+  if (tMode && myTeam) tScores[myTeam] = (tScores[myTeam] || 0) - q.value;
+  let unitsTotal, unitsDone;
+  if (tMode) {
+    const n = fresh.teamCountConfig || 2;
+    unitsTotal = 0;
+    for (let i = 1; i <= n; i++) {
+      if (Object.values(fresh.players||{}).some(p => p.id !== fresh.hostId && p.teamId === i)) unitsTotal++;
+    }
+    unitsTotal = unitsTotal || 1;
+    const seen = new Set();
+    newAttempted.forEach(pid => { const t = players[pid]?.teamId; if (t) seen.add(t); });
+    unitsDone = seen.size;
+  } else {
+    unitsTotal = Object.values(fresh.players||{}).filter(p => p.id !== fresh.hostId).length;
+    unitsDone = newAttempted.length;
+  }
 
-  if (newAttempted.length >= nonHostCount) {
+  if (unitsDone >= unitsTotal) {
     await update(ref(db, `rooms/${state.code}`), {
       players,
+      ...(tMode ? { teamScores: tScores } : {}),
       attemptedBy: newAttempted,
-      usedCells: { ...(fresh.usedCells||{}), [`${ci}-${qi}`]: true },
+      [`usedCells/${ci}-${qi}`]: true,
       buzzedPlayer: null,
       questionState: 'closed',
       revealAnswer: true,
@@ -3340,12 +4472,14 @@ async function timeoutAnswerPhase(){
     const remaining = fresh.buzzPhaseRemainingMs || (buzzSec(fresh) * 1000);
     await update(ref(db, `rooms/${state.code}`), {
       players,
+      ...(tMode ? { teamScores: tScores } : {}),
       attemptedBy: newAttempted,
       buzzedPlayer: null,
       questionState: 'buzzing',
       buzzPhaseDeadline: serverNow() + remaining,
       buzzPhaseRemainingMs: null,
       answerPhaseDeadline: null,
+      phaseStartedAt: serverNow(),
     });
   }
 }
@@ -3355,9 +4489,8 @@ async function revealAnswer(){
   const r = state.room;
   if (!r || !r.currentCell) return;
   const {ci, qi} = r.currentCell;
-  const used = { ...(r.usedCells||{}), [`${ci}-${qi}`]: true };
   await update(ref(db, `rooms/${state.code}`), {
-    usedCells: used,
+    [`usedCells/${ci}-${qi}`]: true,
     revealAnswer: true,
     questionState: 'closed',
     buzzedPlayer: null,
@@ -3410,6 +4543,7 @@ async function playAgain(){
     questionState: null, currentPicker: null, revealAnswer: false,
     roundsTotal: null, currentRound: null,
     finalQ: null, finalBids: null, finalJudgement: null, finalBaseScores: null,
+    teamScores: isTeamMode(r) ? Object.fromEntries(teamsOf(r).map(t => [t.id, 0])) : null,
     chat: null
   });
 }
@@ -3452,11 +4586,10 @@ async function startFinalRound(){
     render(true); return;
   }
   const r = state.room;
-  // Snapshot scores before final so verdicts can be re-applied idempotently
+  // Snapshot scores before final so verdicts can be re-applied idempotently.
+  // Keys are final entities: team keys (t1, t2...) in team mode, else player ids.
   const baseScores = {};
-  for (const [pid, p] of Object.entries(r.players || {})) {
-    baseScores[pid] = p.score || 0;
-  }
+  finalEntityKeys(r).forEach(k => { baseScores[k] = finalEntityScore(r, k); });
   await update(ref(db, `rooms/${state.code}`), {
     status: 'final_bid',
     currentRound: 'final',
@@ -3488,15 +4621,16 @@ async function submitFinalBid(){
   const r = state.room;
   if (!r || state.isHost) return;
   if (r.status !== 'final_bid') return;
-  const me = r.players?.[state.myId];
-  if (!me) return;
-  // If a player has 0 or negative score, still let them bid up to a floor so they
-  // can play the final (classic Jeopardy rule). Otherwise cap at their score.
-  const maxBid = Math.max(FINAL_MIN_BID_CAP, me.score || 0);
+  const key = myFinalKey(r);
+  if (!key) return; // player not in a team
+  const cur = finalEntityScore(r, key);
+  // If score is 0 or negative, still allow bidding up to a floor (classic rule)
+  const maxBid = Math.max(FINAL_MIN_BID_CAP, cur);
   const bid = state.finalBidLocal;
   if (!Number.isInteger(bid) || bid < 0 || bid > maxBid) return;
-  await update(ref(db, `rooms/${state.code}/finalBids/${state.myId}`), {
-    bid, bidSubmitted: true, bidSubmittedAt: Date.now()
+  await update(ref(db, `rooms/${state.code}/finalBids/${key}`), {
+    bid, bidSubmitted: true, bidSubmittedAt: Date.now(),
+    byName: r.players?.[state.myId]?.name || '',
   });
 }
 
@@ -3506,13 +4640,16 @@ async function submitFinalAnswer(){
   if (r.status !== 'final_answer') return;
   const ans = (state.finalAnswerLocal || '').trim();
   if (!ans) return;
-  // Ensure bid exists — fall back to 0 if player skipped phase 1
-  const existing = r.finalBids?.[state.myId];
+  const key = myFinalKey(r);
+  if (!key) return;
+  // Ensure bid exists — fall back to 0 if the bid phase was skipped
+  const existing = r.finalBids?.[key];
   const bidVal = (existing && typeof existing.bid === 'number') ? existing.bid : 0;
   const bidSubmitted = !!(existing && existing.bidSubmitted);
-  await update(ref(db, `rooms/${state.code}/finalBids/${state.myId}`), {
+  await update(ref(db, `rooms/${state.code}/finalBids/${key}`), {
     bid: bidVal, bidSubmitted,
-    answer: ans, answerSubmitted: true, answerSubmittedAt: Date.now()
+    answer: ans, answerSubmitted: true, answerSubmittedAt: Date.now(),
+    answerByName: r.players?.[state.myId]?.name || '',
   });
 }
 
@@ -3567,26 +4704,29 @@ async function sendChat(){
   }
 }
 
-async function judgeFinalPlayer(playerId, verdict){
+async function judgeFinalPlayer(entityKey, verdict){
   if (!state.isHost) return;
   const r = state.room;
   if (!r) return;
-  const sub = r.finalBids?.[playerId];
+  const sub = r.finalBids?.[entityKey];
   // Base score = score before final (fallback to current if missing)
-  const base = (r.finalBaseScores && r.finalBaseScores[playerId] != null)
-    ? r.finalBaseScores[playerId]
-    : (r.players?.[playerId]?.score || 0);
+  const base = (r.finalBaseScores && r.finalBaseScores[entityKey] != null)
+    ? r.finalBaseScores[entityKey]
+    : finalEntityScore(r, entityKey);
   const rawBid = sub?.bid;
   const bidNum = (typeof rawBid === 'number' && !isNaN(rawBid)) ? rawBid : parseInt(rawBid, 10);
   const safeBid = Number.isFinite(bidNum) ? bidNum : 0;
   let newScore = base;
   if (verdict === 'correct') newScore = base + safeBid;
   else if (verdict === 'wrong') newScore = base - safeBid;
-  // Multi-path update: set verdict AND recompute score from base (idempotent)
-  await update(ref(db, `rooms/${state.code}`), {
-    [`finalJudgement/${playerId}`]: verdict,
-    [`players/${playerId}/score`]: newScore,
-  });
+  // Idempotent: verdict + score recomputed from the pre-final base
+  const patch = { [`finalJudgement/${entityKey}`]: verdict };
+  if (typeof entityKey === 'string' && entityKey.startsWith('t')) {
+    patch[`teamScores/${entityKey.slice(1)}`] = newScore;
+  } else {
+    patch[`players/${entityKey}/score`] = newScore;
+  }
+  await update(ref(db, `rooms/${state.code}`), patch);
 }
 
 async function finalizeFinal(){
@@ -3641,6 +4781,33 @@ function updateScoreModalOnly(next){
   }
   const inp = document.getElementById('score-edit-input');
   if (inp && document.activeElement !== inp) inp.value = String(next);
+}
+
+// ============== TEAMS ==============
+async function assignPlayerTeam(pid, teamId){
+  if (!state.isHost || !pid) return;
+  const r = state.room;
+  if (!r) return;
+  const n = r.teamCountConfig || state.setupTeamCount || 2;
+  // Clicking cycles to the next team (1..n), wrapping around
+  let next = teamId;
+  if (!Number.isFinite(next)) next = 1;
+  if (next > n) next = 1;
+  await update(ref(db, `rooms/${state.code}/players/${pid}`), { teamId: next });
+}
+
+async function autoAssignTeams(){
+  if (!state.isHost) return;
+  const r = state.room;
+  if (!r) return;
+  const n = r.teamCountConfig || state.setupTeamCount || 2;
+  const list = getPlayerList(r).filter(p => p.id !== r.hostId);
+  // Shuffle then deal round-robin for even teams
+  const shuffled = [...list].sort(() => Math.random() - 0.5);
+  const patch = {};
+  shuffled.forEach((p, i) => { patch[`players/${p.id}/teamId`] = (i % n) + 1; });
+  if (Object.keys(patch).length === 0) return;
+  await update(ref(db, `rooms/${state.code}`), patch);
 }
 
 async function kickPlayer(pid){
@@ -3705,7 +4872,7 @@ async function init(){
   try {
     onValue(ref(db, '.info/serverTimeOffset'), (snap) => {
       const off = snap.val();
-      if (typeof off === 'number') state.serverTimeOffset = off;
+      if (typeof off === 'number') { state.serverTimeOffset = off; state.clockSynced = true; }
     });
   } catch (_) {}
   // Anonymous auth
@@ -3783,7 +4950,7 @@ function updateFinalSubmitButton(){
 
   if (r.status === 'final_bid') {
     // Phase 1: only the bid matters
-    const myScore = Math.max(FINAL_MIN_BID_CAP, me.score || 0);
+    const myK = myFinalKey(r); const myScore = Math.max(FINAL_MIN_BID_CAP, myK ? finalEntityScore(r, myK) : 0);
     const bid = state.finalBidLocal;
     const validBid = Number.isInteger(bid) && bid >= 0 && bid <= myScore;
     if (err) err.style.display = validBid ? 'none' : 'block';
@@ -3820,7 +4987,7 @@ function updateTimerOnly(){
     total = buzzSec(r);
     const deadline = r.buzzPhaseDeadline || (now + total * 1000);
     sec = Math.max(0, Math.ceil((deadline - now) / 1000));
-  } else if (r.status === 'question' && r.questionState === 'answering') {
+  } else if (r.status === 'question' && (r.questionState === 'answering' || r.questionState === 'dd_answer')) {
     total = answerSec(r);
     const deadline = r.answerPhaseDeadline || (now + total * 1000);
     sec = Math.max(0, Math.ceil((deadline - now) / 1000));
@@ -3840,36 +5007,37 @@ function updateTimerOnly(){
 setInterval(() => {
   const r = state.room;
   if (!r) return;
+  syncAudioPlayback();
   const now = serverNow();
   // Failsafe grace: if the host doesn't advance a phase within 1.5s of the
   // deadline (host backgrounded, lagging, disconnected), any client triggers it.
-  const GRACE = 1500;
+  const GRACE = 8000;
   // Small buffer so a timeout never fires in the same instant a deadline is set
   // (prevents a race where picking a new question is immediately auto-closed).
   const BUF = 400;
   if (r.status === 'question') {
     if (r.questionState === 'countdown') {
       if (r.countdownDeadline && now >= r.countdownDeadline + BUF) {
-        if (state.isHost || now >= r.countdownDeadline + GRACE) openBuzzAfterCountdown();
+        if (state.isHost || (state.clockSynced && now >= r.countdownDeadline + GRACE)) openBuzzAfterCountdown();
       } else {
         updateTimerOnly();
       }
     } else if (r.questionState === 'buzzing') {
       if (r.buzzPhaseDeadline && now >= r.buzzPhaseDeadline + BUF) {
-        if (state.isHost || now >= r.buzzPhaseDeadline + GRACE) timeoutBuzzPhase();
+        if (state.isHost || (state.clockSynced && now >= r.buzzPhaseDeadline + GRACE)) timeoutBuzzPhase();
       } else {
         updateTimerOnly();
       }
-    } else if (r.questionState === 'answering') {
+    } else if (r.questionState === 'answering' || r.questionState === 'dd_answer') {
       if (r.answerPhaseDeadline && now >= r.answerPhaseDeadline + BUF) {
-        if (state.isHost || now >= r.answerPhaseDeadline + GRACE) timeoutAnswerPhase();
+        if (state.isHost || (state.clockSynced && now >= r.answerPhaseDeadline + GRACE)) timeoutAnswerPhase();
       } else {
         updateTimerOnly();
       }
     }
   } else if (r.status === 'final_answer') {
     if (r.finalPhaseDeadline && now >= r.finalPhaseDeadline + BUF) {
-      if (state.isHost || now >= r.finalPhaseDeadline + GRACE) timeoutFinalPhase();
+      if (state.isHost || (state.clockSynced && now >= r.finalPhaseDeadline + GRACE)) timeoutFinalPhase();
     } else {
       updateTimerOnly();
     }
