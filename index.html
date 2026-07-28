@@ -728,6 +728,14 @@ html, body {
 .yt-wrap { position: relative; }
 .yt-wrap iframe { width: 100%; height: 100%; display: block; }
 /* Hides the video title / channel strip YouTube draws over the top of the player */
+.yt-shade-top, .yt-shade-bottom {
+  /* Players see just the picture — YouTube's own bars are masked out */
+  position: absolute; left: 0; right: 0; z-index: 3;
+  background: #000; pointer-events: none;
+}
+.yt-shade-top { top: 0; height: 56px; }
+.yt-shade-bottom { bottom: 0; height: 48px; }
+
 .yt-block {
   /* Transparent shield so players can see the video but can't control it */
   position: absolute; inset: 0; z-index: 3;
@@ -818,6 +826,6 @@ html, body {
   </div>
 </div>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script type="module" src="app.js?v=202607280900"></script>
+<script type="module" src="app.js?v=202607280915"></script>
 </body>
 </html>

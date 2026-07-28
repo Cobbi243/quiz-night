@@ -87,8 +87,13 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.04';
+const APP_VERSION = '2.05';
 const CHANGELOG = [
+  { v: '2.05', date: '28.07.2026', changes: [
+    'Аудіо більше не переривається коли хтось натискає базер — зупиняє лише ведучий',
+    'Гравці бачать чисте відео без плашок YouTube зверху й знизу',
+    'Виправлено відображення власної аватарки на дошці',
+  ]},
   { v: '2.04', date: '28.07.2026', changes: [
     'Власні аватарки — можна поставити свою картинку з телефона або компʼютера',
     'Картинка автоматично обрізається в кружечок і стискається',
@@ -1727,7 +1732,7 @@ function viewBoard(){
       </div>
       ${picker ? `
         <div class="picker-banner">
-          ${isMyPick ? `<b>Обирають твоє питання!</b> Скажи ведучому яку клітинку` : `Обирає: <b>${esc(picker.avatar)} ${esc(picker.name)}</b>${state.isHost ? ' — натисни клітинку яку він назве' : ''}`}
+          ${isMyPick ? `<b>Обирають твоє питання!</b> Скажи ведучому яку клітинку` : `Обирає: <b>${av(picker.avatar)} ${esc(picker.name)}</b>${state.isHost ? ' — натисни клітинку яку він назве' : ''}`}
         </div>
       ` : ''}
       <div class="board-wrap">
@@ -1838,8 +1843,11 @@ function viewQuestion(){
     stageBody = `
       ${q.youtube && q.youtube.id ? `
         <div class="yt-wrap">
-          <div class="yt-title-cover"></div>
-          ${!state.isHost ? `<div class="yt-block" title="Керує ведучий"></div>` : ''}
+          ${state.isHost ? `<div class="yt-title-cover"></div>` : `
+            <div class="yt-shade-top"></div>
+            <div class="yt-shade-bottom"></div>
+            <div class="yt-block" title="Керує ведучий"></div>
+          `}
           <iframe id="yt-frame" data-vid="${esc(q.youtube.id)}"
             src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(location.origin)}${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
             title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
@@ -1868,9 +1876,8 @@ function viewQuestion(){
       ${q.audio ? `
         <div class="audio-player">
           <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.12em; text-transform:uppercase; margin-bottom:8px;">🔊 Аудіопитання</div>
-          <audio id="q-audio" src="${q.audio}" preload="auto" ${state.isHost ? 'controls' : ''} style="width:100%; max-width:420px; ${state.isHost ? '' : 'display:none;'}"></audio>
           ${state.isHost ? `
-            <div style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap;">
+            <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
               <button class="btn btn-accent btn-sm" data-action="play-audio-all">${icon('play',14)} Увімкнути для всіх</button>
               <button class="btn btn-ghost btn-sm" data-action="stop-audio-all">⏹ Зупинити</button>
             </div>
@@ -1883,13 +1890,13 @@ function viewQuestion(){
               <div style="font-size:14px; color:${r.audioPlaying ? 'var(--green)' : 'var(--ink-dim)'};">
                 ${r.audioPlaying ? '▶ грає...' : '⏳ чекаємо на ведучого'}
               </div>
-              <div class="vol-row">
-                <span style="font-size:14px;">🔈</span>
-                <input type="range" id="q-audio-vol" class="vol-slider" min="0" max="100" value="${Math.round((state.audioVolume ?? 1) * 100)}">
-                <span style="font-size:14px;">🔊</span>
-              </div>
             `}
           `}
+          <div class="vol-row">
+            <span style="font-size:14px;">🔈</span>
+            <input type="range" id="q-audio-vol" class="vol-slider" min="0" max="100" value="${Math.round((state.audioVolume ?? 1) * 100)}">
+            <span style="font-size:14px;">🔊</span>
+          </div>
         </div>
       ` : ''}
       ${q.image ? `<img src="${q.image}" class="q-image" style="max-height:42vh;" alt="">` : ''}
@@ -3110,12 +3117,12 @@ function attachListeners(){
     volEl.addEventListener('input', e => {
       const v = Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)) / 100;
       state.audioVolume = v;
-      const a = document.getElementById('q-audio');
+      const a = getGlobalAudio();
       if (a) a.volume = v;
     });
   }
   // Keep the audio element in sync with the chosen volume after re-renders
-  const aEl = document.getElementById('q-audio');
+  const aEl = getGlobalAudio();
   if (aEl) aEl.volume = (state.audioVolume ?? 1);
 
   // Video attach input
@@ -3405,8 +3412,8 @@ async function handleAction(e){
     case 'play-audio-all': await playAudioForAll(); break;
     case 'stop-audio-all': await stopAudioForAll(); break;
     case 'play-audio-local': {
-      const a = document.getElementById('q-audio');
-      if (a) { try { a.currentTime = 0; a.play(); state.audioBlocked = false; render(true); } catch(_){} }
+      const a = syncAudioSource();
+      if (a) { try { a.play(); state.audioBlocked = false; render(true); } catch(_){} }
       break;
     }
     case 'attach-video': {
@@ -4053,6 +4060,42 @@ function syncVideoPlayback(){
 }
 
 // ============== SYNCHRONISED AUDIO ==============
+// The <audio> element lives outside #app so re-rendering the screen (e.g. when
+// someone buzzes) never destroys it and playback keeps going.
+function getGlobalAudio(){
+  let el = document.getElementById('global-q-audio');
+  if (!el) {
+    el = document.createElement('audio');
+    el.id = 'global-q-audio';
+    el.preload = 'auto';
+    el.style.display = 'none';
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+// Points the persistent player at the current question's audio (if any)
+function syncAudioSource(){
+  const r = state.room;
+  const el = getGlobalAudio();
+  let src = '';
+  const finished = r && (r.revealAnswer || r.questionState === 'closed');
+  if (r && r.status === 'question' && r.currentCell && r.pack && !finished) {
+    const q = r.pack.categories?.[r.currentCell.ci]?.questions?.[r.currentCell.qi];
+    if (q && q.audio) src = q.audio;
+  }
+  if (!src) {
+    if (el.src) { try { el.pause(); } catch(_){} el.removeAttribute('src'); el.load(); }
+    return el;
+  }
+  if (el.getAttribute('data-src-key') !== src.slice(0, 64)) {
+    el.src = src;
+    el.setAttribute('data-src-key', src.slice(0, 64));
+    el.volume = (state.audioVolume ?? 1);
+  }
+  return el;
+}
+
 // Host schedules playback slightly in the future so every device starts together.
 async function playAudioForAll(){
   if (!state.isHost || !state.code) return;
@@ -4075,8 +4118,9 @@ async function stopAudioForAll(){
 // Runs on every tick: starts/stops the local <audio> to match the room state.
 function syncAudioPlayback(){
   const r = state.room;
-  const el = document.getElementById('q-audio');
-  if (!r || !el) return;
+  if (!r) return;
+  const el = syncAudioSource();
+  if (!el || !el.src) return;
 
   // Stop requested
   if (r.audioStopToken && state.lastAudioStopToken !== r.audioStopToken) {
