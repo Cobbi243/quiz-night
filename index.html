@@ -740,6 +740,16 @@ html, body {
   background: #000; z-index: 2; pointer-events: none;
 }
 
+/* Uploaded avatar pictures */
+.avatar-img {
+  width: 1.15em; height: 1.15em;
+  border-radius: 50%; object-fit: cover;
+  vertical-align: -0.2em; display: inline-block;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.avatar-btn .avatar-img { width: 26px; height: 26px; vertical-align: middle; }
+.player-avatar .avatar-img { width: 1.1em; height: 1.1em; }
+
 /* Volume control shown to players on audio questions */
 .vol-row {
   display: flex; align-items: center; gap: 10px;
@@ -808,6 +818,6 @@ html, body {
   </div>
 </div>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script type="module" src="app.js?v=202607280845"></script>
+<script type="module" src="app.js?v=202607280900"></script>
 </body>
 </html>

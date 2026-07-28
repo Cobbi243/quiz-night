@@ -87,8 +87,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.03';
+const APP_VERSION = '2.04';
 const CHANGELOG = [
+  { v: '2.04', date: '28.07.2026', changes: [
+    'Власні аватарки — можна поставити свою картинку з телефона або компʼютера',
+    'Картинка автоматично обрізається в кружечок і стискається',
+  ]},
   { v: '2.03', date: '28.07.2026', changes: [
     'Виправлено кнопку «Увімкнути відео для всіх» — тепер справді запускає',
   ]},
@@ -333,6 +337,7 @@ let state = {
   showStats: false,     // stats screen open
   audioTarget: null,    // {ci,qi} awaiting an audio file
   videoTarget: null,    // {ci,qi} awaiting a video file
+  avatarTarget: null,   // 'join' | 'host' awaiting an avatar picture
   lastAudioToken: null, // last synced play token
   lastAudioStopToken: null,
   audioPending: false,  // waiting for the scheduled start moment
@@ -407,6 +412,17 @@ const lsSet = (k,v) => { try { localStorage.setItem(k,v); } catch {} };
 const lsDel = k => { try { localStorage.removeItem(k); } catch {} };
 
 // ============== HELPERS ==============
+// Renders an avatar: either an emoji string or an uploaded data-URL picture
+function av(a, size){
+  const val = a || '👤';
+  if (typeof val === 'string' && val.startsWith('data:')) {
+    const px = size || 0;
+    const style = px ? `width:${px}px;height:${px}px;` : '';
+    return `<img class="avatar-img" src="${val}" alt="" style="${style}">`;
+  }
+  return esc(val);
+}
+
 function esc(s){
   if (s == null) return '';
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -1098,6 +1114,7 @@ function render(force){
   // Always-present hidden input used for attaching audio to questions
   html += `<input type="file" id="audio-input" accept="audio/*" style="display:none;">`;
   html += `<input type="file" id="video-input" accept="video/*" style="display:none;">`;
+  html += `<input type="file" id="avatar-input" accept="image/*" style="display:none;">`;
   // Chat widget — visible whenever inside a room
   if (state.room && state.code) {
     html += viewChatWidget();
@@ -1189,6 +1206,10 @@ function viewJoin(){
         <div style="font-size:11px; color:var(--ink-dim); margin-bottom:8px; text-align:center;">Аватар</div>
         <div class="avatar-grid">
           ${AVATARS.map(a => `<button class="avatar-btn ${state.joinAvatar===a?'active':''}" data-action="join-avatar" data-avatar="${a}">${a}</button>`).join('')}
+          ${(state.joinAvatar||'').startsWith('data:') ? `
+            <button class="avatar-btn active" data-action="pick-avatar-file" data-who="join" title="Твоя картинка">${av(state.joinAvatar)}</button>
+          ` : ''}
+          <button class="avatar-btn" data-action="pick-avatar-file" data-who="join" title="Своя картинка">＋</button>
         </div>
       </div>
       ${state.err ? `<div class="err-text">${esc(state.err)}</div>` : ''}
@@ -1212,6 +1233,10 @@ function viewHostSetup(){
         <div style="font-size:11px; color:var(--ink-dim); margin-bottom:8px; text-align:center;">Аватар</div>
         <div class="avatar-grid">
           ${AVATARS.map(a => `<button class="avatar-btn ${state.hostAvatar===a?'active':''}" data-action="host-avatar" data-avatar="${a}">${a}</button>`).join('')}
+          ${(state.hostAvatar||'').startsWith('data:') ? `
+            <button class="avatar-btn active" data-action="pick-avatar-file" data-who="host" title="Твоя картинка">${av(state.hostAvatar)}</button>
+          ` : ''}
+          <button class="avatar-btn" data-action="pick-avatar-file" data-who="host" title="Своя картинка">＋</button>
         </div>
       </div>
       ${state.err ? `<div class="err-text">${esc(state.err)}</div>` : ''}
@@ -1255,7 +1280,7 @@ function viewLobby(){
             const nextTeam = isTeamMode(r) ? ((p.teamId || 0) % (r.teamCountConfig || 2)) + 1 : null;
             return `
             <div class="player-card ${p.id===state.myId?'me':''}" ${t ? `style="border-left:3px solid ${t.color};"` : ''}>
-              <span class="player-avatar">${p.avatar}</span>
+              <span class="player-avatar">${av(p.avatar)}</span>
               <div class="player-name">
                 <span class="name-text">${esc(p.name)}</span>
                 ${isHostRow ? `<span style="color:var(--gold); flex-shrink:0;">${icon('crown',12)}</span>` : ''}
@@ -1754,7 +1779,7 @@ function viewBoard(){
             const clickAttr = state.isHost ? `data-action="edit-score" data-player="${p.id}"` : '';
             return `<div class="${cls}" ${clickAttr}>
               <div class="player-chip-top">
-                <span class="player-avatar">${p.avatar}</span>
+                <span class="player-avatar">${av(p.avatar)}</span>
                 <div class="player-chip-name">${esc(p.name)}</div>
               </div>
               <div class="player-chip-score ${(p.score||0) < 0 ? 'negative' : ''}">${(p.score||0) > 0 ? '+' : ''}${p.score || 0}</div>
@@ -1795,7 +1820,7 @@ function viewQuestion(){
         <div style="font-size:64px; line-height:1; margin-bottom:8px;">🎲</div>
         <div style="font-family:'Fraunces',serif; font-weight:900; font-size:clamp(28px,5vw,52px); color:var(--gold);">СВОЯ ГРА!</div>
         <div style="margin-top:12px; font-size:16px; color:var(--ink-dim);">
-          ${ddP ? `${ddP.avatar} <b style="color:var(--ink);">${esc(ddP.name)}</b>${ddTeam ? ` <span style="color:${ddTeam.color};">(${ddTeam.emoji} ${esc(ddTeam.name)})</span>` : ''} ставить свої бали` : 'Гравець ставить бали'}
+          ${ddP ? `${av(ddP.avatar)} <b style="color:var(--ink);">${esc(ddP.name)}</b>${ddTeam ? ` <span style="color:${ddTeam.color};">(${ddTeam.emoji} ${esc(ddTeam.name)})</span>` : ''} ставить свої бали` : 'Гравець ставить бали'}
         </div>
         <div style="margin-top:6px; font-size:13px; color:var(--ink-faint);">Питання зʼявиться після ставки</div>
       </div>`;
@@ -1935,7 +1960,7 @@ function viewQuestion(){
     const mine = state.myId === r.ddPlayer;
     controls += `<div class="buzzed-banner">
       <div class="buzzed-banner-label">🎲 СВОЯ ГРА · СТАВКА ${bet}</div>
-      <div class="buzzed-banner-name">${ddP ? `${ddP.avatar} ${esc(ddP.name)}` : ''}</div>
+      <div class="buzzed-banner-name">${ddP ? `${av(ddP.avatar)} ${esc(ddP.name)}` : ''}</div>
       ${mine ? `<div style="font-size:14px; margin-top:4px;">Відповідай вголос — ведучий слухає</div>` : ''}
     </div>`;
     if (state.isHost) {
@@ -1978,7 +2003,7 @@ function viewQuestion(){
     const bt = isTeamMode(r) ? TEAM_PRESETS.find(x => x.id === buzzed.teamId) : null;
     controls += `<div class="buzzed-banner">
       <div class="buzzed-banner-label">ВІДПОВІДАЄ${bt ? ` · <span style="color:${bt.color};">${bt.emoji} ${esc(bt.name)}</span>` : ''}</div>
-      <div class="buzzed-banner-name">${buzzed.avatar} ${esc(buzzed.name)}</div>
+      <div class="buzzed-banner-name">${av(buzzed.avatar)} ${esc(buzzed.name)}</div>
       ${iAmBuzzed ? `<div style="font-size:14px; margin-top:4px;">Скажи відповідь — ведучий тебе чує</div>` : ''}
     </div>`;
     if (state.isHost) {
@@ -2005,7 +2030,7 @@ function viewQuestion(){
     controls += `<div class="attempted-list">
       ${attempted.map(pid => {
         const p = players.find(x => x.id === pid);
-        return p ? `<span class="attempted-chip">${p.avatar} ${esc(p.name)}</span>` : '';
+        return p ? `<span class="attempted-chip">${av(p.avatar)} ${esc(p.name)}</span>` : '';
       }).join('')}
     </div>`;
   }
@@ -2068,7 +2093,7 @@ function viewResults(){
               <div class="winner-emoji">${win.emoji}</div>
               <div class="winner-name" style="color:${win.color};">${esc(win.name)}</div>
               <div class="winner-score">${win.score} БАЛІВ</div>
-              <div style="margin-top:8px; font-size:14px; color:var(--ink-dim);">${win.members.map(m => `${m.avatar} ${esc(m.name)}`).join(' · ') || '—'}</div>
+              <div style="margin-top:8px; font-size:14px; color:var(--ink-dim);">${win.members.map(m => `${av(m.avatar)} ${esc(m.name)}`).join(' · ') || '—'}</div>
             </div>
           ` : '<div style="color:var(--ink-dim)">Без переможця</div>'}
         </div>
@@ -2118,7 +2143,7 @@ function viewResults(){
         <h2 style="font-family:'Fraunces',serif; font-size:64px; font-weight:900; margin-bottom:24px;">Переможець</h2>
         ${winner ? `
           <div class="winner-card">
-            <div class="winner-emoji">${winner.avatar}</div>
+            <div class="winner-emoji">${av(winner.avatar)}</div>
             <div class="winner-name">${esc(winner.name)}</div>
             <div class="winner-score">${winner.score || 0} БАЛІВ</div>
           </div>
@@ -2129,7 +2154,7 @@ function viewResults(){
         ${sorted.map((p, rank) => `
           <div class="final-row ${rank===0?'first':''}">
             <div class="rank">${rank+1}</div>
-            <span style="font-size:24px;">${p.avatar}</span>
+            <span style="font-size:24px;">${av(p.avatar)}</span>
             <div class="name">${esc(p.name)}</div>
             <div class="pts ${(p.score||0)<0?'negative':''}">${p.score || 0}</div>
           </div>
@@ -2194,7 +2219,7 @@ function viewRoundDone(){
           `).join('') : sorted.map((p, rank) => `
           <div class="final-row ${rank===0?'first':''} ${state.isHost ? 'editable-row' : ''}" ${state.isHost ? `data-action="edit-score" data-player="${p.id}"` : ''}>
             <div class="rank">${rank+1}</div>
-            <span style="font-size:24px;">${p.avatar}</span>
+            <span style="font-size:24px;">${av(p.avatar)}</span>
             <div class="name">${esc(p.name)}</div>
             <div class="pts ${(p.score||0)<0?'negative':''}">${p.score || 0}</div>
             ${state.isHost ? `<span style="margin-left:8px; opacity:0.4; font-size:13px;">✏</span>` : ''}
@@ -2293,7 +2318,7 @@ function viewFinalBid(){
             const sub = myBids[k];
             const done = sub && sub.bidSubmitted;
             return `<div class="final-row" ${teamMode ? `style="border-left:3px solid ${info.color};"` : ''}>
-              <span style="font-size:20px;">${info.avatar}</span>
+              <span style="font-size:20px;">${av(info.avatar)}</span>
               <div class="name">
                 <div ${teamMode ? `style="color:${info.color}; font-weight:700;"` : ''}>${esc(info.name)}</div>
                 ${teamMode ? `<div style="font-size:11px; color:var(--ink-faint);">${info.members.map(m => m.avatar).join(' ')}</div>` : ''}
@@ -2332,7 +2357,7 @@ function viewFinalBid(){
     <div class="container slide-up" style="padding-top:24px;">
       <div class="eyebrow">ФІНАЛ · ФАЗА 1 · СТАВКА</div>
       <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:900; margin-top:8px;">${esc(r.finalQ.category)}</h2>
-      ${teamMode ? `<div style="margin-top:8px; font-size:14px; color:${myInfo.color}; font-weight:700;">${myInfo.avatar} ${esc(myInfo.name)} — ставка спільна на команду</div>` : ''}
+      ${teamMode ? `<div style="margin-top:8px; font-size:14px; color:${myInfo.color}; font-weight:700;">${av(myInfo.avatar)} ${esc(myInfo.name)} — ставка спільна на команду</div>` : ''}
       <p style="color:var(--ink-dim); margin-top:8px; margin-bottom:24px;">Постав скільки балів готовий поставити на правильну відповідь. Питання покажуть після того як всі поставлять.</p>
       ${bidAlreadySubmitted ? `
         <div class="card" style="text-align:center;">
@@ -2399,7 +2424,7 @@ function viewFinalAnswer(){
             const sub = bids[k];
             const done = sub && sub.answerSubmitted;
             return `<div class="final-row" ${teamMode ? `style="border-left:3px solid ${info.color};"` : ''}>
-              <span style="font-size:20px;">${info.avatar}</span>
+              <span style="font-size:20px;">${av(info.avatar)}</span>
               <div class="name" ${teamMode ? `style="color:${info.color}; font-weight:700;"` : ''}>${esc(info.name)}</div>
               <div style="color:${done?'var(--green)':'var(--ink-dim)'}; font-size:13px;">${done ? '✓ Готово' : '⌛ Думає'}</div>
             </div>`;
@@ -2499,7 +2524,7 @@ function viewFinalReveal(){
     const borderClr = verdict === 'correct' ? 'rgba(74,222,128,0.5)' : verdict === 'wrong' ? 'rgba(232,74,48,0.5)' : 'var(--line)';
     return `<div class="card" style="margin-bottom:10px; border-color:${borderClr}; opacity:0.9;">
       <div style="display:flex; align-items:center; gap:10px;">
-        <span style="font-size:20px;">${info.avatar}</span>
+        <span style="font-size:20px;">${av(info.avatar)}</span>
         <div style="flex:1; min-width:0;">
           <b style="display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; ${teamMode?`color:${info.color};`:''}">${esc(info.name)}</b>
           <span style="font-size:13px; color:var(--ink-dim);">${sub.answerSubmitted && sub.answer ? `«${esc(sub.answer)}»` : '⏱ не відповіли'} · ставка ${safeBid}</span>
@@ -2525,9 +2550,9 @@ function viewFinalReveal(){
     const borderClr = verdict === 'correct' ? 'var(--green)' : verdict === 'wrong' ? 'var(--accent)' : 'var(--gold)';
     return `<div class="card spotlight-card" style="border:2px solid ${borderClr}; padding:24px;">
       <div style="text-align:center; margin-bottom:16px;">
-        <div style="font-size:48px; margin-bottom:4px;">${info.avatar}</div>
+        <div style="font-size:48px; margin-bottom:4px;">${av(info.avatar)}</div>
         <div style="font-family:'Fraunces',serif; font-weight:900; font-size:24px; ${teamMode?`color:${info.color};`:''}">${esc(info.name)}</div>
-        ${teamMode && info.members.length ? `<div style="font-size:12px; color:var(--ink-faint); margin-top:2px;">${info.members.map(m => `${m.avatar} ${esc(m.name)}`).join(' · ')}</div>` : ''}
+        ${teamMode && info.members.length ? `<div style="font-size:12px; color:var(--ink-faint); margin-top:2px;">${info.members.map(m => `${av(m.avatar)} ${esc(m.name)}`).join(' · ')}</div>` : ''}
         <div style="font-size:13px; color:var(--gold); font-weight:700; margin-top:4px;">поставив ${safeBid} балів</div>
       </div>
       <div style="background:var(--soft); padding:16px; border-radius:12px; text-align:center; margin-bottom:16px;">
@@ -2610,7 +2635,7 @@ function viewFinalReveal(){
               return `
               <div class="card" style="margin-bottom:8px; opacity:0.6;">
                 <div style="display:flex; align-items:center; gap:10px;">
-                  <span style="font-size:20px;">${info.avatar}</span>
+                  <span style="font-size:20px;">${av(info.avatar)}</span>
                   <div style="flex:1;">${esc(info.name)}</div>
                   <div style="font-family:'Fraunces',serif; font-weight:900; color:${sc<0?'var(--accent)':'var(--gold)'};">${sc}</div>
                 </div>
@@ -2667,7 +2692,7 @@ function viewChatWidget(){
           const mine = m.uid === state.myId;
           const isHostMsg = m.uid === r.hostId;
           return `<div class="chat-msg ${mine ? 'mine' : ''}">
-            <div class="chat-msg-meta">${m.avatar || '👤'} ${esc(m.name || '?')}${isHostMsg ? ' 🎙' : ''}</div>
+            <div class="chat-msg-meta">${av(m.avatar)} ${esc(m.name || '?')}${isHostMsg ? ' 🎙' : ''}</div>
             <div class="chat-msg-bubble">${esc(m.text)}</div>
           </div>`;
         }).join('')}
@@ -2699,7 +2724,7 @@ function viewStats(){
     <div class="container slide-up">
       <div class="eyebrow">ОСОБИСТА СТАТИСТИКА</div>
       <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin:8px 0 4px;">
-        ${prof ? `${prof.avatar || '👤'} ${esc(prof.name || 'Гравець')}` : 'Ще нема даних'}
+        ${prof ? `${av(prof.avatar)} ${esc(prof.name || 'Гравець')}` : 'Ще нема даних'}
       </h2>
       <p style="color:var(--ink-dim); margin-bottom:24px; font-size:13px;">
         ${prof ? `Зіграно ігор: ${prof.games || 0}` : 'Зіграй хоча б одну гру — тут зʼявиться твоя статистика.'}
@@ -2886,7 +2911,7 @@ function viewScoreEditModal(){
   return `
     <div class="modal-backdrop" data-action="close-score-edit">
       <div class="modal" data-stop="1">
-        <div class="modal-title">${p.avatar} ${esc(p.name)}</div>
+        <div class="modal-title">${av(p.avatar)} ${esc(p.name)}</div>
         <div class="modal-subtitle">Корекція балів вручну. Зміни синхронізуються одразу.</div>
         <div class="modal-score ${current < 0 ? 'negative' : ''}" id="modal-score-value">${current > 0 ? '+' : ''}${current}</div>
 
@@ -3033,6 +3058,47 @@ function attachListeners(){
         render(true);
       } catch (err) {
         state.setupErr = 'Не вдалося прочитати аудіофайл';
+        render(true);
+      }
+    });
+  }
+
+  // Custom avatar upload
+  const avIn = document.getElementById('avatar-input');
+  if (avIn && !avIn._bound) {
+    avIn._bound = true;
+    avIn.addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f || !state.avatarTarget) return;
+      try {
+        const dataUrl = await new Promise((res, rej) => {
+          const rd = new FileReader();
+          rd.onload = () => res(rd.result); rd.onerror = () => rej(new Error('x'));
+          rd.readAsDataURL(f);
+        });
+        // Crop to a square and shrink hard — avatars are tiny on screen
+        const small = await new Promise((res, rej) => {
+          const img = new Image();
+          img.onload = () => {
+            const S = 96;
+            const c = document.createElement('canvas');
+            c.width = S; c.height = S;
+            const ctx = c.getContext('2d');
+            const side = Math.min(img.width, img.height);
+            const sx = (img.width - side) / 2, sy = (img.height - side) / 2;
+            ctx.drawImage(img, sx, sy, side, side, 0, 0, S, S);
+            res(c.toDataURL('image/jpeg', 0.82));
+          };
+          img.onerror = () => rej(new Error('x'));
+          img.src = dataUrl;
+        });
+        if (state.avatarTarget === 'join') { state.joinAvatar = small; lsSet(LS_AVATAR, small); }
+        else { state.hostAvatar = small; lsSet(LS_AVATAR, small); }
+        state.avatarTarget = null;
+        state.err = '';
+        render(true);
+      } catch (_) {
+        state.err = 'Не вдалося прочитати картинку';
         render(true);
       }
     });
@@ -3323,6 +3389,12 @@ async function handleAction(e){
         render(true);
       }
       break;
+    case 'pick-avatar-file': {
+      state.avatarTarget = el.dataset.who;
+      const ai2 = document.getElementById('avatar-input');
+      if (ai2) { ai2.value = ''; ai2.click(); }
+      break;
+    }
     case 'play-video-local': {
       const p2 = ensureYtPlayer();
       try { if (p2 && p2.playVideo) { p2.playVideo(); state.ytBlocked = false; render(true); } } catch(_){}
@@ -5039,7 +5111,7 @@ async function init(){
       state.authReady = true;
       // Restore saved avatar/name
       const savedAvatar = lsGet(LS_AVATAR);
-      if (savedAvatar && AVATARS.includes(savedAvatar)) {
+      if (savedAvatar && (AVATARS.includes(savedAvatar) || savedAvatar.startsWith('data:'))) {
         state.joinAvatar = savedAvatar;
         state.hostAvatar = savedAvatar;
       }
