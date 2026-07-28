@@ -87,8 +87,11 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.39';
+const APP_VERSION = '1.40';
 const CHANGELOG = [
+  { v: '1.40', date: '28.07.2026', changes: [
+    'Повернуто кнопки гучності, субтитрів і повного екрану у відео з YouTube',
+  ]},
   { v: '1.39', date: '27.07.2026', changes: [
     'Аудіо тепер запускає ведучий — грає одночасно у всіх',
     'Картинка питання лишається видимою під відповіддю',
@@ -1817,7 +1820,7 @@ function viewQuestion(){
         <div class="yt-wrap">
           <div class="yt-title-cover"></div>
           <iframe
-            src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&fs=0&disablekb=1&playsinline=1${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
+            src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
             title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
         </div>
         ${state.isHost ? `<div style="font-size:12px; color:var(--ink-dim);">Натисни ▶ і поділись звуком/екраном щоб усі бачили</div>` : ''}
