@@ -658,6 +658,65 @@ html, body {
 }
 .chat-input-row .input { flex: 1; }
 
+/* ===== HOME SCREEN ===== */
+.home-screen {
+  position: relative;
+  min-height: 100vh; min-height: 100dvh;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 40px 20px; text-align: center;
+}
+.home-glow {
+  position: absolute; top: 12%; left: 50%;
+  width: min(720px, 90vw); height: min(420px, 50vh);
+  transform: translateX(-50%);
+  background: radial-gradient(closest-side, rgba(232,74,48,0.20), rgba(240,180,41,0.08) 55%, transparent 75%);
+  filter: blur(18px); pointer-events: none; z-index: 0;
+  animation: homeGlow 7s ease-in-out infinite;
+}
+@keyframes homeGlow {
+  0%, 100% { opacity: 0.75; transform: translateX(-50%) scale(1); }
+  50%      { opacity: 1;    transform: translateX(-50%) scale(1.07); }
+}
+.home-hero, .home-actions, .feature-pills, .home-links { position: relative; z-index: 1; }
+.home-hero { margin-bottom: 40px; }
+.home-hero .hero-sub { max-width: 520px; margin: 16px auto 0; line-height: 1.6; }
+
+.home-actions {
+  display: flex; gap: 12px; flex-wrap: wrap;
+  justify-content: center; width: 100%; max-width: 520px;
+}
+.home-cta { flex: 1 1 200px; }
+
+.feature-pills {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  justify-content: center; margin-top: 28px;
+  max-width: 560px;
+}
+.feature-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--line);
+  color: var(--ink-dim);
+  padding: 6px 12px; border-radius: 999px;
+  font-size: 12px; font-weight: 600;
+  transition: all 0.18s ease;
+}
+.feature-pill:hover { color: var(--ink); border-color: rgba(240,180,41,0.4); transform: translateY(-1px); }
+
+.home-links {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 32px; flex-wrap: wrap; justify-content: center;
+}
+.home-links-sep { color: var(--ink-faint); }
+.link-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--ink-dim); font-family: inherit; font-size: 13px;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 2px; transition: color 0.15s;
+}
+.link-btn:hover { color: var(--gold); }
+
 /* YouTube question embed */
 .yt-wrap {
   width: 100%; max-width: 640px;
@@ -721,6 +780,6 @@ html, body {
     <div style="margin-top:16px; color:var(--ink-dim);">Завантаження...</div>
   </div>
 </div>
-<script type="module" src="app.js?v=202607280752"></script>
+<script type="module" src="app.js?v=202607280800"></script>
 </body>
 </html>
