@@ -87,8 +87,16 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '1.38';
+const APP_VERSION = '1.39';
 const CHANGELOG = [
+  { v: '1.39', date: '27.07.2026', changes: [
+    'Аудіо тепер запускає ведучий — грає одночасно у всіх',
+    'Картинка питання лишається видимою під відповіддю',
+    'Прибрано назву відео та зайвий брендинг YouTube',
+    'Можна прикріпити коротке відео зі свого пристрою',
+    'Додано 8 нових досягнень гравцям і 8 окремих — ведучому',
+    'Виправлено обрізання довгого тексту питання зверху',
+  ]},
   { v: '1.38', date: '27.07.2026', changes: [
     'Виправлено: кнопка «прикріпити аудіо» не реагувала на натискання',
   ]},
@@ -345,8 +353,14 @@ let state = {
   savedGameId: null,    // guards against saving the same game twice
   newAchievements: null,// ids unlocked in the game just finished
   myProfile: null,      // cached stats profile
+  myHostProfile: null,  // cached host stats
   showStats: false,     // stats screen open
   audioTarget: null,    // {ci,qi} awaiting an audio file
+  videoTarget: null,    // {ci,qi} awaiting a video file
+  lastAudioToken: null, // last synced play token
+  lastAudioStopToken: null,
+  audioPending: false,  // waiting for the scheduled start moment
+  audioBlocked: false,  // browser refused autoplay
   authReady: false,
   err: '',
   loading: false,
@@ -484,6 +498,7 @@ async function savePack(name, pack){
         image: q.image || null,
         answerImage: q.answerImage || null,
         audio: q.audio || null,
+        video: q.video || null,
         youtube: q.youtube || null,
       }))
     }))
@@ -655,9 +670,9 @@ function normalizeCategory(cat){
     const v = VALUES[i];
     const found = sorted.find(q => q.value === v) || sorted[i];
     if (found) {
-      questions.push({ value: v, q: found.q, a: found.a, explanation: found.explanation || null, image: found.image, answerImage: found.answerImage, audio: found.audio || null, youtube: found.youtube || null });
+      questions.push({ value: v, q: found.q, a: found.a, explanation: found.explanation || null, image: found.image, answerImage: found.answerImage, audio: found.audio || null, video: found.video || null, youtube: found.youtube || null });
     } else {
-      questions.push({ value: v, q: '', a: '', explanation: null, image: null, answerImage: null, audio: null, youtube: null });
+      questions.push({ value: v, q: '', a: '', explanation: null, image: null, answerImage: null, audio: null, video: null, youtube: null });
     }
   }
   return { name: cat.name, questions };
@@ -1099,6 +1114,7 @@ function render(force){
   html += `<button class="version-badge" data-action="show-changelog" title="Що нового">v${APP_VERSION}</button>`;
   // Always-present hidden input used for attaching audio to questions
   html += `<input type="file" id="audio-input" accept="audio/*" style="display:none;">`;
+  html += `<input type="file" id="video-input" accept="video/*" style="display:none;">`;
   // Chat widget — visible whenever inside a room
   if (state.room && state.code) {
     html += viewChatWidget();
@@ -1528,10 +1544,16 @@ function viewSetupFile(){
                   <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
                     ${q.youtube && q.youtube.id ? `<span style="font-size:12px; color:var(--gold);">🎬 відео</span>` : ''}
                     ${q.audio ? `
-                      <span style="font-size:12px; color:var(--green);">🔊 аудіо прикріплено</span>
+                      <span style="font-size:12px; color:var(--green);">🔊 аудіо</span>
                       <button class="btn btn-ghost btn-sm" data-action="remove-audio" data-ci="${ci}" data-qi="${qi}" style="padding:2px 8px; font-size:11px;">прибрати</button>
                     ` : `
-                      <button class="btn btn-ghost btn-sm" data-action="attach-audio" data-ci="${ci}" data-qi="${qi}" style="padding:2px 8px; font-size:11px; color:var(--ink-dim);">🔊 прикріпити аудіо</button>
+                      <button class="btn btn-ghost btn-sm" data-action="attach-audio" data-ci="${ci}" data-qi="${qi}" style="padding:2px 8px; font-size:11px; color:var(--ink-dim);">🔊 аудіо</button>
+                    `}
+                    ${q.video ? `
+                      <span style="font-size:12px; color:var(--green);">🎥 відео</span>
+                      <button class="btn btn-ghost btn-sm" data-action="remove-video" data-ci="${ci}" data-qi="${qi}" style="padding:2px 8px; font-size:11px;">прибрати</button>
+                    ` : `
+                      <button class="btn btn-ghost btn-sm" data-action="attach-video" data-ci="${ci}" data-qi="${qi}" style="padding:2px 8px; font-size:11px; color:var(--ink-dim);">🎥 відео</button>
                     `}
                   </div>
                 </div>
@@ -1782,6 +1804,7 @@ function viewQuestion(){
   } else if (r.revealAnswer) {
     stageBody = `
       <div class="q-answer-reveal" style="width:100%;">
+        ${q.image ? `<img src="${q.image}" class="q-image" style="max-height:26vh; margin-bottom:10px;" alt="">` : ''}
         <div class="q-answer-reveal-label">ПРАВИЛЬНА ВІДПОВІДЬ</div>
         ${q.answerImage ? `<img src="${q.answerImage}" class="q-image" style="max-height:38vh; margin-bottom:8px;" alt="">` : ''}
         ${q.a && q.a.trim() ? `<div class="q-answer-reveal-text">${escMultiline(q.a)}</div>` : ''}
@@ -1792,17 +1815,39 @@ function viewQuestion(){
     stageBody = `
       ${q.youtube && q.youtube.id ? `
         <div class="yt-wrap">
+          <div class="yt-title-cover"></div>
           <iframe
-            src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
+            src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&fs=0&disablekb=1&playsinline=1${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
             title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
         </div>
         ${state.isHost ? `<div style="font-size:12px; color:var(--ink-dim);">Натисни ▶ і поділись звуком/екраном щоб усі бачили</div>` : ''}
       ` : ''}
+      ${q.video ? `
+        <div class="yt-wrap">
+          <video id="q-video" src="${q.video}" ${state.isHost ? 'controls' : ''} playsinline preload="auto" style="width:100%; height:100%; object-fit:contain; background:#000;"></video>
+        </div>
+        ${state.isHost ? `<div style="font-size:12px; color:var(--ink-dim);">Показуй на спільному екрані</div>` : ''}
+      ` : ''}
       ${q.audio ? `
         <div class="audio-player">
           <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.12em; text-transform:uppercase; margin-bottom:8px;">🔊 Аудіопитання</div>
-          <audio id="q-audio" src="${q.audio}" controls preload="auto" style="width:100%; max-width:420px;"></audio>
-          ${state.isHost ? `<div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Увімкни звук на гучномовець, щоб усі чули</div>` : ''}
+          <audio id="q-audio" src="${q.audio}" preload="auto" ${state.isHost ? 'controls' : ''} style="width:100%; max-width:420px; ${state.isHost ? '' : 'display:none;'}"></audio>
+          ${state.isHost ? `
+            <div style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap;">
+              <button class="btn btn-accent btn-sm" data-action="play-audio-all">${icon('play',14)} Увімкнути для всіх</button>
+              <button class="btn btn-ghost btn-sm" data-action="stop-audio-all">⏹ Зупинити</button>
+            </div>
+            <div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Запуститься одночасно на всіх пристроях</div>
+          ` : `
+            ${state.audioBlocked ? `
+              <button class="btn btn-accent btn-sm" data-action="play-audio-local">${icon('play',14)} Увімкнути звук</button>
+              <div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Браузер заблокував автозапуск — натисни щоб почути</div>
+            ` : `
+              <div style="font-size:14px; color:${r.audioPlaying ? 'var(--green)' : 'var(--ink-dim)'};">
+                ${r.audioPlaying ? '▶ грає...' : '⏳ чекаємо на ведучого'}
+              </div>
+            `}
+          `}
         </div>
       ` : ''}
       ${q.image ? `<img src="${q.image}" class="q-image" style="max-height:42vh;" alt="">` : ''}
@@ -1973,7 +2018,7 @@ function viewQuestion(){
           <div class="q-value">${q.value}</div>
         </div>
         <div class="qs-stage-body">
-          ${stageBody}
+          <div class="qs-body-inner">${stageBody}</div>
         </div>
       </div>
 
@@ -2029,7 +2074,7 @@ function viewResults(){
             <div style="font-size:12px; color:var(--gold); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:8px;">🎉 Нові досягнення</div>
             <div style="display:flex; flex-wrap:wrap; gap:10px;">
               ${state.newAchievements.map(id => {
-                const a = ACHIEVEMENTS.find(x => x.id === id);
+                const a = ACHIEVEMENTS.find(x => x.id === id) || HOST_ACHIEVEMENTS.find(x => x.id === id);
                 return a ? `<div style="display:flex; align-items:center; gap:6px; background:var(--soft); padding:6px 10px; border-radius:999px;">
                   <span style="font-size:18px;">${a.emoji}</span>
                   <span style="font-size:13px; font-weight:600;">${esc(a.name)}</span>
@@ -2078,7 +2123,7 @@ function viewResults(){
           <div style="font-size:12px; color:var(--gold); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:8px;">🎉 Нові досягнення</div>
           <div style="display:flex; flex-wrap:wrap; gap:10px;">
             ${state.newAchievements.map(id => {
-            const a = ACHIEVEMENTS.find(x => x.id === id);
+            const a = ACHIEVEMENTS.find(x => x.id === id) || HOST_ACHIEVEMENTS.find(x => x.id === id);
             return a ? `<div style="display:flex; align-items:center; gap:6px; background:var(--soft); padding:6px 10px; border-radius:999px;">
               <span style="font-size:18px;">${a.emoji}</span>
               <span style="font-size:13px; font-weight:600;">${esc(a.name)}</span>
@@ -2671,6 +2716,28 @@ function viewStats(){
         }).join('')}
       </div>
 
+      ${state.myHostProfile ? `
+        <div style="display:flex; justify-content:space-between; align-items:baseline; margin:32px 0 12px;">
+          <h3 style="font-family:'Fraunces',serif; font-size:22px; font-weight:700;">🎙 Як ведучий</h3>
+          <span style="font-size:13px; color:var(--ink-dim);">${Object.keys(state.myHostProfile.achievements||{}).length} / ${HOST_ACHIEVEMENTS.length}</span>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(90px,1fr)); gap:10px; margin-bottom:16px;">
+          ${stat('ПРОВЕДЕНО', state.myHostProfile.gamesHosted || 0)}
+          ${stat('ПИТАНЬ', state.myHostProfile.questionsAsked || 0, 'var(--ink)')}
+          ${stat('МАКС ГРАВЦІВ', state.myHostProfile.maxPlayers || 0, 'var(--ink)')}
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:10px;">
+          ${HOST_ACHIEVEMENTS.map(a => {
+            const got = !!(state.myHostProfile.achievements||{})[a.id];
+            return `<div class="card" style="padding:14px; ${got ? 'border-color:rgba(240,180,41,0.45);' : 'opacity:0.45;'}">
+              <div style="font-size:26px; margin-bottom:6px; ${got ? '' : 'filter:grayscale(1);'}">${a.emoji}</div>
+              <div style="font-weight:700; font-size:14px; ${got ? 'color:var(--gold);' : ''}">${esc(a.name)}</div>
+              <div style="font-size:11px; color:var(--ink-dim); margin-top:2px; line-height:1.35;">${esc(a.desc)}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      ` : ''}
+
       <div class="info-text" style="margin-top:24px;">
         💡 Статистика зберігається для цього браузера. З іншого пристрою буде окрема.
       </div>
@@ -2954,6 +3021,39 @@ function attachListeners(){
     });
   }
 
+  // Video attach input
+  const videoIn = document.getElementById('video-input');
+  if (videoIn && !videoIn._bound) {
+    videoIn._bound = true;
+    videoIn.addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f || !state.videoTarget) return;
+      if (f.size > 2_000_000) {
+        state.setupErr = `Відео завелике (${Math.round(f.size/1024/1024*10)/10} МБ). Ліміт ~2 МБ — це кілька секунд. Для довших відео краще залий на YouTube і встав [yt:посилання] у текст питання.`;
+        render(true); return;
+      }
+      try {
+        const dataUrl = await new Promise((res, rej) => {
+          const rd = new FileReader();
+          rd.onload = () => res(rd.result);
+          rd.onerror = () => rej(new Error('read failed'));
+          rd.readAsDataURL(f);
+        });
+        const { ci, qi } = state.videoTarget;
+        const pack = state.setupFilePack || state.setupAiPreview || state.setupManualPack;
+        if (pack?.categories?.[ci]?.questions?.[qi]) {
+          pack.categories[ci].questions[qi].video = dataUrl;
+          state.setupErr = '';
+        }
+        state.videoTarget = null;
+        render(true);
+      } catch (err) {
+        state.setupErr = 'Не вдалося прочитати відеофайл';
+        render(true);
+      }
+    });
+  }
+
   // Daily Double bet input
   const ddInp = document.getElementById('dd-bid');
   if (ddInp) {
@@ -3192,6 +3292,28 @@ async function handleAction(e){
         render(true);
       }
       break;
+    case 'play-audio-all': await playAudioForAll(); break;
+    case 'stop-audio-all': await stopAudioForAll(); break;
+    case 'play-audio-local': {
+      const a = document.getElementById('q-audio');
+      if (a) { try { a.currentTime = 0; a.play(); state.audioBlocked = false; render(true); } catch(_){} }
+      break;
+    }
+    case 'attach-video': {
+      state.videoTarget = { ci: parseInt(el.dataset.ci,10), qi: parseInt(el.dataset.qi,10) };
+      const vi = document.getElementById('video-input');
+      if (vi) { vi.value = ''; vi.click(); }
+      break;
+    }
+    case 'remove-video': {
+      const ci = parseInt(el.dataset.ci,10), qi = parseInt(el.dataset.qi,10);
+      const pack = state.setupFilePack || state.setupAiPreview || state.setupManualPack;
+      if (pack?.categories?.[ci]?.questions?.[qi]) {
+        delete pack.categories[ci].questions[qi].video;
+        render(true);
+      }
+      break;
+    }
     case 'attach-audio': {
       state.audioTarget = { ci: parseInt(el.dataset.ci,10), qi: parseInt(el.dataset.qi,10) };
       const ai = document.getElementById('audio-input');
@@ -3210,6 +3332,7 @@ async function handleAction(e){
     case 'open-stats':
       state.showStats = true;
       state.myProfile = await loadMyProfile();
+      state.myHostProfile = await loadMyHostProfile();
       render(true); break;
     case 'close-stats':
       state.showStats = false;
@@ -3424,7 +3547,7 @@ function attachRoomListener(code){
     if (cellChanged) { state.lastBuzzAttempt = 0; state.buzzCooldownUntil = 0; }
     state.room = data;
     // Record this game into the player's profile once the results are shown
-    if (data.status === 'results' && !state.isHost) saveGameResult();
+    if (data.status === 'results') saveGameResult();
     // Sync screen with status (only for the standard board/question/results flow;
     // round_done/final_* are rendered by status check directly)
     if (!state.subScreen) {
@@ -3581,7 +3704,7 @@ async function startGame(pack){
       name: c.name,
       questions: c.questions.slice(0, QS_PER_CAT).map((q, i) => ({
         value: VALUES[i] * valueMult,
-        q: q.q, a: q.a, explanation: q.explanation || null, image: q.image || null, answerImage: q.answerImage || null, audio: q.audio || null, youtube: q.youtube || null,
+        q: q.q, a: q.a, explanation: q.explanation || null, image: q.image || null, answerImage: q.answerImage || null, audio: q.audio || null, video: q.video || null, youtube: q.youtube || null,
       }))
     }))
   };
@@ -3721,6 +3844,64 @@ async function openBuzzAfterCountdown(){
   });
 }
 
+// ============== SYNCHRONISED AUDIO ==============
+// Host schedules playback slightly in the future so every device starts together.
+async function playAudioForAll(){
+  if (!state.isHost || !state.code) return;
+  const at = serverNow() + 700; // small lead so slower devices catch up
+  await update(ref(db, `rooms/${state.code}`), {
+    audioToken: genId(),
+    audioPlayAt: at,
+    audioPlaying: true,
+  });
+}
+
+async function stopAudioForAll(){
+  if (!state.isHost || !state.code) return;
+  await update(ref(db, `rooms/${state.code}`), {
+    audioPlaying: false,
+    audioStopToken: genId(),
+  });
+}
+
+// Runs on every tick: starts/stops the local <audio> to match the room state.
+function syncAudioPlayback(){
+  const r = state.room;
+  const el = document.getElementById('q-audio');
+  if (!r || !el) return;
+
+  // Stop requested
+  if (r.audioStopToken && state.lastAudioStopToken !== r.audioStopToken) {
+    state.lastAudioStopToken = r.audioStopToken;
+    try { el.pause(); el.currentTime = 0; } catch (_) {}
+    state.audioBlocked = false;
+    return;
+  }
+  // New play request
+  if (r.audioToken && state.lastAudioToken !== r.audioToken) {
+    state.lastAudioToken = r.audioToken;
+    state.audioPending = true;
+    state.audioBlocked = false;
+  }
+  if (state.audioPending && r.audioPlayAt && serverNow() >= r.audioPlayAt) {
+    state.audioPending = false;
+    try {
+      el.currentTime = 0;
+      const pr = el.play();
+      if (pr && pr.catch) {
+        pr.catch(() => {
+          // Browser blocked autoplay — show a manual button instead
+          state.audioBlocked = true;
+          render(true);
+        });
+      }
+    } catch (_) {
+      state.audioBlocked = true;
+      render(true);
+    }
+  }
+}
+
 async function openBuzz(){
   if (!state.isHost) return;
   const r = state.room;
@@ -3777,6 +3958,26 @@ const ACHIEVEMENTS = [
   { id: 'comeback',     emoji: '🔥', name: 'Камбек',           desc: 'Виграти, побувавши в мінусі' },
   { id: 'dd_master',    emoji: '🎰', name: 'Ризикова',         desc: 'Виграти «Свою гру» 3 рази' },
   { id: 'final_boss',   emoji: '🧠', name: 'Фінальний бос',    desc: 'Правильно відповісти у фіналі' },
+  { id: 'runner_up',    emoji: '🥈', name: 'Майже',             desc: 'Зайняти друге місце' },
+  { id: 'streak_3',     emoji: '🔗', name: 'Серія',             desc: 'Виграти 3 гри поспіль' },
+  { id: 'all_in',       emoji: '💥', name: 'Ва-банк',           desc: 'Поставити всі бали у «Своїй грі» і виграти' },
+  { id: 'ice_cold',     emoji: '🧊', name: 'Холоднокровний',    desc: 'Виграти фінал, поставивши все' },
+  { id: 'buzz_50',      emoji: '🔔', name: 'Дзвіночок',         desc: '50 виграних базерів за весь час' },
+  { id: 'correct_100',  emoji: '📚', name: 'Ерудит',            desc: '100 правильних відповідей за весь час' },
+  { id: 'team_player',  emoji: '🤝', name: 'Командний гравець', desc: 'Виграти в командному режимі' },
+  { id: 'veteran',      emoji: '🎖', name: 'Ветеран',           desc: 'Зіграти 25 ігор' },
+];
+
+// Achievements for the host — a separate track so hosting also feels rewarding
+const HOST_ACHIEVEMENTS = [
+  { id: 'h_first',    emoji: '🎙', name: 'Дебют ведучого',  desc: 'Провести першу гру' },
+  { id: 'h_5',        emoji: '🎤', name: 'Конферансьє',     desc: 'Провести 5 ігор' },
+  { id: 'h_20',       emoji: '🎪', name: 'Шоумен',          desc: 'Провести 20 ігор' },
+  { id: 'h_crowd',    emoji: '👥', name: 'Аншлаг',          desc: 'Провести гру з 8+ гравцями' },
+  { id: 'h_marathon', emoji: '🌙', name: 'Марафонець',      desc: 'Провести гру з 3 раундів' },
+  { id: 'h_teams',    emoji: '⚔️', name: 'Тренер',          desc: 'Провести командну гру' },
+  { id: 'h_media',    emoji: '🎬', name: 'Продюсер',        desc: 'Провести гру з аудіо або відео' },
+  { id: 'h_100q',     emoji: '📋', name: 'Сто питань',      desc: 'Задати 100 питань за весь час' },
 ];
 
 async function loadMyProfile(){
@@ -3787,11 +3988,69 @@ async function loadMyProfile(){
   } catch (_) { return null; }
 }
 
+async function loadMyHostProfile(){
+  if (!state.myId || !db) return null;
+  try {
+    const snap = await get(ref(db, `users/${state.myId}/hostProfile`));
+    return snap.exists() ? snap.val() : null;
+  } catch (_) { return null; }
+}
+
+// Ведучий теж отримує свій прогрес — окрема гілка профілю
+async function saveHostResult(){
+  const r = state.room;
+  if (!r || !state.myId || !r.gameId) return;
+  if (state.savedGameId === r.gameId) return;
+  state.savedGameId = r.gameId;
+  try {
+    const already = await get(ref(db, `users/${state.myId}/hostHistory/${r.gameId}`));
+    if (already.exists()) return;
+
+    const playersCount = Object.values(r.players || {}).filter(p => p.id !== r.hostId).length;
+    const questionsAsked = Object.keys(r.usedCells || {}).length;
+    const hadMedia = !!(r.pack?.categories || []).some(c =>
+      (c.questions || []).some(q => q.audio || q.video || q.youtube));
+
+    const snap = await get(ref(db, `users/${state.myId}/hostProfile`));
+    const hp = snap.exists() ? snap.val() : {
+      gamesHosted: 0, questionsAsked: 0, maxPlayers: 0, achievements: {},
+    };
+    hp.gamesHosted = (hp.gamesHosted || 0) + 1;
+    hp.questionsAsked = (hp.questionsAsked || 0) + questionsAsked;
+    hp.maxPlayers = Math.max(hp.maxPlayers || 0, playersCount);
+    hp.lastHostedAt = Date.now();
+
+    const ach = { ...(hp.achievements || {}) };
+    const before = hp.achievements || {};
+    const unlock = (id) => { if (!ach[id]) ach[id] = Date.now(); };
+    if (hp.gamesHosted >= 1) unlock('h_first');
+    if (hp.gamesHosted >= 5) unlock('h_5');
+    if (hp.gamesHosted >= 20) unlock('h_20');
+    if (playersCount >= 8) unlock('h_crowd');
+    if ((r.roundsTotal || 1) >= 3) unlock('h_marathon');
+    if (isTeamMode(r)) unlock('h_teams');
+    if (hadMedia) unlock('h_media');
+    if (hp.questionsAsked >= 100) unlock('h_100q');
+    const fresh = Object.keys(ach).filter(k => !before[k]);
+    hp.achievements = ach;
+
+    await set(ref(db, `users/${state.myId}/hostHistory/${r.gameId}`), {
+      gameId: r.gameId, playedAt: Date.now(), players: playersCount,
+      questionsAsked, rounds: r.roundsTotal || 1, teamMode: isTeamMode(r),
+    });
+    await set(ref(db, `users/${state.myId}/hostProfile`), hp);
+    if (fresh.length) { state.newAchievements = fresh; render(true); }
+  } catch (e) {
+    console.error('[saveHostResult]', e);
+  }
+}
+
 // Записує результат гри в особистий профіль. Ідемпотентно за gameId.
 async function saveGameResult(){
   const r = state.room;
-  if (!r || !state.myId || state.isHost) return;
+  if (!r || !state.myId) return;
   if (!r.gameId) return;
+  if (state.isHost) return saveHostResult();
   if (state.savedGameId === r.gameId) return;      // already saved this session
   state.savedGameId = r.gameId;
 
@@ -3866,6 +4125,14 @@ async function saveGameResult(){
     if (won && entry.wasNegative) unlock('comeback');
     if (prof.ddWins >= 3) unlock('dd_master');
     if (entry.finalCorrect) unlock('final_boss');
+    if (place === 2) unlock('runner_up');
+    if (prof.buzzes >= 50) unlock('buzz_50');
+    if (prof.correct >= 100) unlock('correct_100');
+    if (won && teamMode) unlock('team_player');
+    if (prof.games >= 25) unlock('veteran');
+    // Win streak
+    prof.streak = won ? ((prof.streak || 0) + 1) : 0;
+    if (prof.streak >= 3) unlock('streak_3');
     // Which ones are brand new (for the "unlocked!" toast)
     const before = prof.achievements || {};
     const fresh = Object.keys(ach).filter(k => !before[k]);
@@ -4761,6 +5028,7 @@ function updateTimerOnly(){
 setInterval(() => {
   const r = state.room;
   if (!r) return;
+  syncAudioPlayback();
   const now = serverNow();
   // Failsafe grace: if the host doesn't advance a phase within 1.5s of the
   // deadline (host backgrounded, lagging, disconnected), any client triggers it.
