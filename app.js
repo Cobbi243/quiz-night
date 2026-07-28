@@ -87,8 +87,13 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.05';
+const APP_VERSION = '2.06';
 const CHANGELOG = [
+  { v: '2.06', date: '28.07.2026', changes: [
+    'У статистику додано середні бали за кожен раунд окремо',
+    'Додано точність вгаданих фінальних питань',
+    'Додано рекорд і антирекорд балів за одну гру',
+  ]},
   { v: '2.05', date: '28.07.2026', changes: [
     'Аудіо більше не переривається коли хтось натискає базер — зупиняє лише ведучий',
     'Гравці бачать чисте відео без плашок YouTube зверху й знизу',
@@ -2748,6 +2753,34 @@ function viewStats(){
           ${stat('БАЗЕРІВ', prof.buzzes || 0, 'var(--ink)')}
           ${stat('СВОЇХ ІГОР', prof.ddWins || 0)}
         </div>
+
+        ${(() => {
+          const avg = (sum, cnt) => (cnt > 0) ? Math.round(sum / cnt) : null;
+          const r1 = avg(prof.sumR1, prof.cntR1);
+          const r2 = avg(prof.sumR2, prof.cntR2);
+          const r3 = avg(prof.sumR3, prof.cntR3);
+          const finAcc = (prof.finalsPlayed > 0)
+            ? Math.round(((prof.finalWins || 0) / prof.finalsPlayed) * 100) : null;
+          const worst = (prof.worstScore != null) ? prof.worstScore : null;
+          const anyRound = (r1 != null || r2 != null || r3 != null);
+          return `
+            ${anyRound ? `
+              <div style="font-size:13px; color:var(--ink-dim); margin:8px 0 10px;">Середні бали за раунд</div>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(90px,1fr)); gap:10px; margin-bottom:20px;">
+                ${r1 != null ? stat('РАУНД 1', r1, r1 < 0 ? 'var(--accent)' : 'var(--gold)') : ''}
+                ${r2 != null ? stat('РАУНД 2', r2, r2 < 0 ? 'var(--accent)' : 'var(--gold)') : ''}
+                ${r3 != null ? stat('РАУНД 3', r3, r3 < 0 ? 'var(--accent)' : 'var(--gold)') : ''}
+              </div>
+            ` : ''}
+            <div style="font-size:13px; color:var(--ink-dim); margin:8px 0 10px;">Рекорди</div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(90px,1fr)); gap:10px; margin-bottom:12px;">
+              ${stat('РЕКОРД ЗА ГРУ', prof.bestScore || 0, 'var(--green)')}
+              ${worst != null ? stat('АНТИРЕКОРД', worst, 'var(--accent)') : ''}
+              ${finAcc != null ? stat('ФІНАЛИ ВГАДАНО', finAcc + '%', finAcc >= 50 ? 'var(--green)' : 'var(--accent)') : ''}
+              ${prof.finalsPlayed ? stat('ФІНАЛІВ ЗІГРАНО', prof.finalsPlayed, 'var(--ink)') : ''}
+            </div>
+          `;
+        })()}
       ` : ''}
 
       <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px;">
@@ -4328,8 +4361,21 @@ async function saveGameResult(){
       place = ranked.findIndex(p => p.id === state.myId) + 1;
     }
 
+    // Points earned in each round (scores carry over, so take the difference)
+    const rs = r.roundScores || {};
+    const at = (n) => {
+      const v = rs[n] && rs[n][state.myId];
+      return (typeof v === 'number') ? v : null;
+    };
+    const a1 = at(1), a2 = at(2), a3 = at(3);
+    const gain1 = a1;
+    const gain2 = (a2 != null && a1 != null) ? a2 - a1 : null;
+    const gain3 = (a3 != null && a2 != null) ? a3 - a2 : null;
+    const playedFinal = !!(r.finalBids && r.finalBids[teamMode ? me.teamId : state.myId]?.bidSubmitted);
+
     const entry = {
       gameId: r.gameId,
+      gain1, gain2, gain3, playedFinal,
       playedAt: Date.now(),
       score: myFinalScore,
       won, place,
@@ -4348,6 +4394,9 @@ async function saveGameResult(){
       name: me.name, avatar: me.avatar,
       games: 0, wins: 0, totalScore: 0, bestScore: 0,
       correct: 0, wrong: 0, buzzes: 0, ddWins: 0, finalWins: 0,
+      worstScore: null,
+      sumR1: 0, cntR1: 0, sumR2: 0, cntR2: 0, sumR3: 0, cntR3: 0,
+      finalsPlayed: 0,
       achievements: {},
     };
     prof.name = me.name; prof.avatar = me.avatar;
@@ -4360,6 +4409,11 @@ async function saveGameResult(){
     prof.buzzes = (prof.buzzes || 0) + entry.buzzes;
     prof.ddWins = (prof.ddWins || 0) + entry.ddWins;
     prof.finalWins = (prof.finalWins || 0) + (entry.finalCorrect ? 1 : 0);
+    prof.worstScore = (prof.worstScore == null) ? myFinalScore : Math.min(prof.worstScore, myFinalScore);
+    if (gain1 != null) { prof.sumR1 = (prof.sumR1 || 0) + gain1; prof.cntR1 = (prof.cntR1 || 0) + 1; }
+    if (gain2 != null) { prof.sumR2 = (prof.sumR2 || 0) + gain2; prof.cntR2 = (prof.cntR2 || 0) + 1; }
+    if (gain3 != null) { prof.sumR3 = (prof.sumR3 || 0) + gain3; prof.cntR3 = (prof.cntR3 || 0) + 1; }
+    if (playedFinal) prof.finalsPlayed = (prof.finalsPlayed || 0) + 1;
     prof.lastPlayedAt = Date.now();
 
     // Unlock achievements
@@ -4788,12 +4842,21 @@ async function backToBoard(){
   if (!r) return;
   const totalCells = CATS_PER_BOARD * QS_PER_CAT;
   const isRoundDone = Object.keys(r.usedCells || {}).length >= totalCells;
-  await update(ref(db, `rooms/${state.code}`), {
+  const patch = {
     currentCell: null, buzzedPlayer: null, attemptedBy: [],
     questionState: null, revealAnswer: false,
     status: isRoundDone ? 'round_done' : 'board',
     buzzPhaseDeadline: null, answerPhaseDeadline: null, buzzPhaseRemainingMs: null,
-  });
+  };
+  if (isRoundDone) {
+    // Remember each player's running total so per-round gains can be worked out later
+    const rn = (typeof r.currentRound === 'number') ? r.currentRound : 1;
+    Object.values(r.players || {}).forEach(p => {
+      if (p.id === r.hostId) return;
+      patch[`roundScores/${rn}/${p.id}`] = p.score || 0;
+    });
+  }
+  await update(ref(db, `rooms/${state.code}`), patch);
 }
 
 async function endGame(){
