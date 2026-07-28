@@ -87,8 +87,13 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.01';
+const APP_VERSION = '2.02';
 const CHANGELOG = [
+  { v: '2.02', date: '28.07.2026', changes: [
+    'Відео тепер справді стартує одночасно у всіх, коли ведучий вмикає',
+    'Виправлено: статус аудіо оновлюється одразу, а не після натискання базера',
+    'Виправлено: пробіл працює навіть після використання регулятора гучності',
+  ]},
   { v: '2.01', date: '28.07.2026', changes: [
     'Відео з YouTube тепер вмикає лише ведучий — гравці не можуть запустити',
     'Гравцям додано регулятор гучності для аудіопитань',
@@ -330,6 +335,10 @@ let state = {
   audioPending: false,  // waiting for the scheduled start moment
   audioBlocked: false,  // browser refused autoplay
   audioVolume: 1,       // player-side volume for audio questions
+  lastYtToken: null,
+  lastYtStopToken: null,
+  ytPending: false,
+  ytBlocked: false,
   authReady: false,
   err: '',
   loading: false,
@@ -986,6 +995,8 @@ function computeHash(){
       players: r.players, currentCell: r.currentCell,
       teamModeConfig: r.teamModeConfig, teamCountConfig: r.teamCountConfig, teamScores: r.teamScores,
       dailyDoubles: r.dailyDoubles, ddPlayer: r.ddPlayer, ddBid: r.ddBid, ddBidSubmitted: r.ddBidSubmitted,
+      audioPlaying: r.audioPlaying, audioToken: r.audioToken, audioStopToken: r.audioStopToken,
+      ytPlaying: r.ytPlaying, ytToken: r.ytToken, ytStopToken: r.ytStopToken,
       buzzedPlayer: r.buzzedPlayer, attemptedBy: r.attemptedBy,
       questionState: r.questionState, currentPicker: r.currentPicker,
       usedCells: r.usedCells, revealAnswer: r.revealAnswer,
@@ -1801,11 +1812,24 @@ function viewQuestion(){
         <div class="yt-wrap">
           <div class="yt-title-cover"></div>
           ${!state.isHost ? `<div class="yt-block" title="Керує ведучий"></div>` : ''}
-          <iframe
-            src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
+          <iframe id="yt-frame" data-vid="${esc(q.youtube.id)}"
+            src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
             title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
         </div>
-        <div style="font-size:12px; color:var(--ink-dim);">${state.isHost ? 'Натисни ▶ і поділись звуком/екраном щоб усі бачили' : '🎬 Відео вмикає ведучий'}</div>
+        ${state.isHost ? `
+          <div style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap;">
+            <button class="btn btn-accent btn-sm" data-action="play-video-all">${icon('play',14)} Увімкнути для всіх</button>
+            <button class="btn btn-ghost btn-sm" data-action="stop-video-all">⏹ Зупинити</button>
+          </div>
+          <div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Запуститься одночасно на всіх пристроях</div>
+        ` : `
+          <div style="font-size:13px; color:${r.ytPlaying ? 'var(--green)' : 'var(--ink-dim)'}; margin-top:8px;">
+            ${r.ytPlaying ? '▶ грає...' : '🎬 відео вмикає ведучий'}
+          </div>
+          ${(r.ytPlaying && state.ytBlocked) ? `
+            <button class="btn btn-accent btn-sm" data-action="play-video-local" style="margin-top:8px;">${icon('play',14)} Не грає? Натисни</button>
+          ` : ''}
+        `}
       ` : ''}
       ${q.video ? `
         <div class="yt-wrap">
@@ -3296,6 +3320,13 @@ async function handleAction(e){
         render(true);
       }
       break;
+    case 'play-video-local': {
+      const p2 = ensureYtPlayer();
+      try { if (p2 && p2.playVideo) { p2.playVideo(); state.ytBlocked = false; render(true); } } catch(_){}
+      break;
+    }
+    case 'play-video-all': await playVideoForAll(); break;
+    case 'stop-video-all': await stopVideoForAll(); break;
     case 'play-audio-all': await playAudioForAll(); break;
     case 'stop-audio-all': await stopAudioForAll(); break;
     case 'play-audio-local': {
@@ -3846,6 +3877,78 @@ async function openBuzzAfterCountdown(){
     countdownDeadline: null,
     phaseStartedAt: now,
   });
+}
+
+// ============== SYNCHRONISED YOUTUBE ==============
+let ytPlayer = null;
+let ytPlayerVid = null;
+let ytApiReady = false;
+window.onYouTubeIframeAPIReady = function(){ ytApiReady = true; };
+
+// Binds a YT.Player to the current iframe (recreated whenever the video changes)
+function ensureYtPlayer(){
+  if (!ytApiReady || !window.YT || !window.YT.Player) return null;
+  const frame = document.getElementById('yt-frame');
+  if (!frame) { ytPlayer = null; ytPlayerVid = null; return null; }
+  const vid = frame.getAttribute('data-vid');
+  if (ytPlayer && ytPlayerVid === vid && ytPlayer.getIframe && ytPlayer.getIframe() === frame) return ytPlayer;
+  try {
+    ytPlayer = new YT.Player(frame, {});
+    ytPlayerVid = vid;
+  } catch (_) { ytPlayer = null; }
+  return ytPlayer;
+}
+
+async function playVideoForAll(){
+  if (!state.isHost || !state.code) return;
+  await update(ref(db, `rooms/${state.code}`), {
+    ytToken: genId(),
+    ytPlayAt: serverNow() + 700,
+    ytPlaying: true,
+  });
+}
+
+async function stopVideoForAll(){
+  if (!state.isHost || !state.code) return;
+  await update(ref(db, `rooms/${state.code}`), {
+    ytPlaying: false,
+    ytStopToken: genId(),
+  });
+}
+
+function syncVideoPlayback(){
+  const r = state.room;
+  if (!r) return;
+  const p = ensureYtPlayer();
+  if (!p || typeof p.playVideo !== 'function') return;
+
+  if (r.ytStopToken && state.lastYtStopToken !== r.ytStopToken) {
+    state.lastYtStopToken = r.ytStopToken;
+    try { p.pauseVideo(); } catch (_) {}
+    return;
+  }
+  if (r.ytToken && state.lastYtToken !== r.ytToken) {
+    state.lastYtToken = r.ytToken;
+    state.ytPending = true;
+  }
+  if (state.ytPending && r.ytPlayAt && serverNow() >= r.ytPlayAt) {
+    state.ytPending = false;
+    try {
+      const startAt = (state.room?.pack && state.room.currentCell)
+        ? (state.room.pack.categories?.[state.room.currentCell.ci]?.questions?.[state.room.currentCell.qi]?.youtube?.start || 0)
+        : 0;
+      if (startAt) p.seekTo(startAt, true);
+      p.playVideo();
+      // Some mobile browsers refuse unmuted autoplay — offer a manual tap
+      setTimeout(() => {
+        try {
+          if (p.getPlayerState && p.getPlayerState() !== 1 && state.room?.ytPlaying) {
+            state.ytBlocked = true; render(true);
+          }
+        } catch (_) {}
+      }, 1200);
+    } catch (_) {}
+  }
 }
 
 // ============== SYNCHRONISED AUDIO ==============
@@ -4945,8 +5048,14 @@ init();
 document.addEventListener('keydown', (e) => {
   if (e.code !== 'Space' && e.key !== ' ') return;
   // Don't hijack space when typing in an input/textarea
-  const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
-  if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) return;
+  const t = e.target;
+  const tag = (t && t.tagName) ? t.tagName.toLowerCase() : '';
+  const type = (t && t.type) ? String(t.type).toLowerCase() : '';
+  // Sliders and buttons aren't "typing" — only block for real text fields
+  const isTypingField = (tag === 'textarea')
+    || (tag === 'input' && !['range','checkbox','radio','button','submit'].includes(type))
+    || (t && t.isContentEditable);
+  if (isTypingField) return;
   const r = state.room;
   if (!r) return;
   if (state.isHost) return;
@@ -5033,6 +5142,7 @@ setInterval(() => {
   const r = state.room;
   if (!r) return;
   syncAudioPlayback();
+  syncVideoPlayback();
   const now = serverNow();
   // Failsafe grace: if the host doesn't advance a phase within 1.5s of the
   // deadline (host backgrounded, lagging, disconnected), any client triggers it.
