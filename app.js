@@ -87,8 +87,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.14';
+const APP_VERSION = '2.15';
 const CHANGELOG = [
+  { v: '2.15', date: '28.07.2026', changes: [
+    'У «Своїй грі» таймер більше не йде поки гравець робить ставку',
+    'Відлік на відповідь стартує лише після підтвердження ставки',
+  ]},
   { v: '2.14', date: '28.07.2026', changes: [
     'Іконки аудіо та відео на клітинках тепер такі ж дрібні як іконка картинки',
   ]},
@@ -4110,6 +4114,9 @@ async function pickCell(ci, qi){
     patch.ddBid = null;
     patch.ddBidSubmitted = false;
     patch.buzzPhaseDeadline = null;
+    patch.answerPhaseDeadline = null;
+    patch.countdownDeadline = null;
+    patch.buzzPhaseRemainingMs = null;
     await update(ref(db, `rooms/${state.code}`), patch);
     return;
   }
@@ -5539,6 +5546,7 @@ function updateFinalSubmitButton(){
 function updateTimerOnly(){
   const r = state.room;
   if (!r) return;
+  if (r.status === 'question' && r.questionState === 'dd_bid') return;
   const now = serverNow();
   // Countdown phase: update the big number
   if (r.status === 'question' && r.questionState === 'countdown' && r.countdownDeadline) {
@@ -5583,6 +5591,9 @@ setInterval(() => {
   // (prevents a race where picking a new question is immediately auto-closed).
   const BUF = 400;
   if (r.status === 'question') {
+    // While the Daily Double bet is being placed there is no timer at all —
+    // the answer clock only starts once the bet is confirmed.
+    if (r.questionState === 'dd_bid') return;
     if (r.questionState === 'countdown') {
       if (r.countdownDeadline && now >= r.countdownDeadline + BUF) {
         if (state.isHost || (state.clockSynced && now >= r.countdownDeadline + GRACE)) openBuzzAfterCountdown();
