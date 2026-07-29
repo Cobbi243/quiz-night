@@ -87,8 +87,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.08';
+const APP_VERSION = '2.09';
 const CHANGELOG = [
+  { v: '2.09', date: '28.07.2026', changes: [
+    'НОВЕ: загальний рейтинг гравців — таблиця з перемогами, точністю й рекордами',
+    'Доступний з головного екрану та зі сторінки статистики',
+  ]},
   { v: '2.08', date: '28.07.2026', changes: [
     'Виправлено: чорна заглушка на відео більше не зникає через секунду',
     'Виправлено: аудіо тепер запускається щоразу, без потреби тиснути «Зупинити»',
@@ -358,6 +362,8 @@ let state = {
   myProfile: null,      // cached stats profile
   myHostProfile: null,  // cached host stats
   showStats: false,     // stats screen open
+  showRanking: false,   // ranking table open
+  leaderboard: [],      // cached ranking rows
   audioTarget: null,    // {ci,qi} awaiting an audio file
   videoTarget: null,    // {ci,qi} awaiting a video file
   avatarTarget: null,   // 'join' | 'host' awaiting an avatar picture
@@ -1028,6 +1034,8 @@ function computeHash(){
     showFormatHelp: state.showFormatHelp,
     showChangelog: state.showChangelog,
     showStats: state.showStats,
+    showRanking: state.showRanking,
+    rankingCount: (state.leaderboard||[]).length,
     newAchievements: (state.newAchievements||[]).join(','),
     profileGames: state.myProfile?.games || 0,
     chatOpen: state.chatOpen,
@@ -1118,6 +1126,12 @@ function render(force){
   if (state.editingScorePlayerId && state.isHost && state.room && state.room.players) {
     html += viewScoreEditModal();
   }
+  if (state.showRanking) {
+    appEl.innerHTML = viewRanking();
+    attachListeners();
+    return;
+  }
+
   if (state.showStats) {
     appEl.innerHTML = viewStats();
     attachListeners();
@@ -1230,6 +1244,8 @@ function viewHome(){
 
       <div class="home-links">
         <button class="link-btn" data-action="open-stats">${icon('trophy',14)} Статистика і досягнення</button>
+        <span class="home-links-sep">·</span>
+        <button class="link-btn" data-action="open-ranking">${icon('crown',14)} Рейтинг гравців</button>
         <span class="home-links-sep">·</span>
         <button class="link-btn" data-action="show-format-help">${icon('eye',14)} Як зробити свій пак</button>
       </div>
@@ -2872,9 +2888,55 @@ function viewStats(){
         </div>
       ` : ''}
 
-      <div class="info-text" style="margin-top:24px;">
+      <button class="btn btn-ghost btn-full" data-action="open-ranking" style="margin-top:24px;">
+        ${icon('crown',16)} Загальний рейтинг гравців
+      </button>
+
+      <div class="info-text" style="margin-top:16px;">
         💡 Статистика зберігається для цього браузера. З іншого пристрою буде окрема.
       </div>
+    </div>
+  `;
+}
+
+// ============== RANKING TABLE ==============
+function viewRanking(){
+  const rows = state.leaderboard;
+  return `
+    <button class="back-btn" data-action="close-ranking">${icon('arrowLeft',16)} Назад</button>
+    <div class="container slide-up">
+      <div class="eyebrow">ЗАГАЛЬНИЙ РЕЙТИНГ</div>
+      <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin:8px 0 4px;">Таблиця гравців</h2>
+      <p style="color:var(--ink-dim); margin-bottom:24px; font-size:13px;">Сортування за перемогами, потім за рекордом.</p>
+
+      ${rows === null ? `
+        <div class="card"><div style="color:var(--ink-dim); font-size:14px; line-height:1.6;">
+          Рейтинг недоступний — у Firebase не додано правило для вузла <b style="color:var(--ink);">leaderboard</b>.
+          Додай його в Rules і таблиця запрацює.
+        </div></div>
+      ` : (!rows || rows.length === 0) ? `
+        <div class="card"><div style="color:var(--ink-dim); font-size:14px;">Поки порожньо — зіграйте кілька ігор.</div></div>
+      ` : `
+        <div class="card">
+          ${rows.map((p, i) => {
+            const acc = (p.correct + p.wrong) > 0 ? Math.round((p.correct / (p.correct + p.wrong)) * 100) : 0;
+            const me = p.uid === state.myId;
+            const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
+            return `<div class="final-row ${i===0?'first':''}" style="${me ? 'background:rgba(240,180,41,0.08); border-radius:8px;' : ''}">
+              <div class="rank">${medal || (i+1)}</div>
+              <span style="font-size:22px;">${av(p.avatar)}</span>
+              <div class="name">
+                <div style="font-weight:700; ${me ? 'color:var(--gold);' : ''}">${esc(p.name || 'Гравець')}${me ? ' (ти)' : ''}</div>
+                <div style="font-size:11px; color:var(--ink-faint);">
+                  ${p.games || 0} ігор · точність ${acc}% · рекорд ${p.bestScore || 0} · 🏅${p.achievements || 0}
+                </div>
+              </div>
+              <div class="pts">${p.wins || 0}</div>
+            </div>`;
+          }).join('')}
+          <div style="font-size:11px; color:var(--ink-faint); text-align:right; margin-top:8px;">праворуч — перемоги</div>
+        </div>
+      `}
     </div>
   `;
 }
@@ -3535,6 +3597,13 @@ async function handleAction(e){
       state.showStats = true;
       state.myProfile = await loadMyProfile();
       state.myHostProfile = await loadMyHostProfile();
+      render(true); break;
+    case 'open-ranking':
+      state.showRanking = true;
+      state.leaderboard = await loadLeaderboard();
+      render(true); break;
+    case 'close-ranking':
+      state.showRanking = false;
       render(true); break;
     case 'close-stats':
       state.showStats = false;
@@ -4357,6 +4426,21 @@ async function loadMyProfile(){
   } catch (_) { return null; }
 }
 
+async function loadLeaderboard(){
+  if (!db) return [];
+  try {
+    const snap = await get(ref(db, 'leaderboard'));
+    if (!snap.exists()) return [];
+    const rows = Object.entries(snap.val()).map(([uid, v]) => ({ uid, ...v }));
+    rows.sort((a, b) =>
+      (b.wins || 0) - (a.wins || 0) ||
+      (b.bestScore || 0) - (a.bestScore || 0) ||
+      (b.games || 0) - (a.games || 0)
+    );
+    return rows;
+  } catch (_) { return null; }   // null = no access (rule missing)
+}
+
 async function loadMyHostProfile(){
   if (!state.myId || !db) return null;
   try {
@@ -4530,6 +4614,21 @@ async function saveGameResult(){
 
     await set(ref(db, `users/${state.myId}/history/${r.gameId}`), entry);
     await set(ref(db, `users/${state.myId}/profile`), prof);
+
+    // Public card for the shared ranking table (readable by everyone)
+    try {
+      await set(ref(db, `leaderboard/${state.myId}`), {
+        name: prof.name || 'Гравець',
+        avatar: prof.avatar || '👤',
+        games: prof.games || 0,
+        wins: prof.wins || 0,
+        bestScore: prof.bestScore || 0,
+        correct: prof.correct || 0,
+        wrong: prof.wrong || 0,
+        achievements: Object.keys(prof.achievements || {}).length,
+        updatedAt: Date.now(),
+      });
+    } catch (_) { /* leaderboard is optional — ignore if rules forbid it */ }
 
     if (fresh.length) {
       state.newAchievements = fresh;
