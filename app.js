@@ -87,8 +87,13 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.09';
+const APP_VERSION = '2.10';
 const CHANGELOG = [
+  { v: '2.10', date: '28.07.2026', changes: [
+    'Переробка оновлення екрану: чат, модалки й статуси тепер живуть окремим шаром',
+    'Заглушка на відео та підпис «грає» оновлюються без перезапуску медіа',
+    'Це мало виправити застиглу заглушку і аудіо що не стартувало',
+  ]},
   { v: '2.09', date: '28.07.2026', changes: [
     'НОВЕ: загальний рейтинг гравців — таблиця з перемогами, точністю й рекордами',
     'Доступний з головного екрану та зі сторінки статистики',
@@ -1138,28 +1143,22 @@ function render(force){
     return;
   }
 
-  // Overlay: format help modal
-  if (state.showFormatHelp) {
-    html += viewFormatHelpModal();
-  }
-  // Overlay: changelog modal
-  if (state.showChangelog) {
-    html += viewChangelogModal();
-  }
-  // Always-present version badge (top-right)
-  html += `<button class="version-badge" data-action="show-changelog" title="Що нового">v${APP_VERSION}</button>`;
-  // Always-present hidden input used for attaching audio to questions
-  html += `<input type="file" id="audio-input" accept="audio/*" style="display:none;">`;
-  html += `<input type="file" id="video-input" accept="video/*" style="display:none;">`;
-  html += `<input type="file" id="avatar-input" accept="image/*" style="display:none;">`;
-  // Chat widget — visible whenever inside a room
-  if (state.room && state.code) {
-    html += viewChatWidget();
-  }
+  // ---- Overlays live in their own root so they always refresh, even when the
+  // ---- main screen is only partially updated (which keeps media playing).
+  let overlay = '';
+  if (state.showFormatHelp) overlay += viewFormatHelpModal();
+  if (state.showChangelog) overlay += viewChangelogModal();
+  overlay += `<button class="version-badge" data-action="show-changelog" title="Що нового">v${APP_VERSION}</button>`;
+  overlay += `<input type="file" id="audio-input" accept="audio/*" style="display:none;">`;
+  overlay += `<input type="file" id="video-input" accept="video/*" style="display:none;">`;
+  overlay += `<input type="file" id="avatar-input" accept="image/*" style="display:none;">`;
+  if (state.room && state.code) overlay += viewChatWidget();
 
-  // While a question is on screen, avoid rebuilding the whole DOM when only the
-  // controls change (buzzer, judging, timers). A full rewrite would restart any
-  // playing audio/video and cause a visible flicker.
+  const overlayEl = document.getElementById('overlay-root');
+  if (overlayEl && overlayEl.innerHTML !== overlay) overlayEl.innerHTML = overlay;
+
+  // While a question is on screen, only refresh the parts that change. Rewriting
+  // the whole screen would restart any playing audio/video and cause a flicker.
   const liveScreen = appEl.querySelector('.question-screen');
   if (liveScreen && html.indexOf('class="question-screen') !== -1) {
     const tmp = document.createElement('div');
@@ -1172,7 +1171,9 @@ function render(force){
       };
       swap('.qs-controls');
       swap('.qs-topbar');
-      // Overlays (chat, modals, badges) live outside the question screen
+      // Media status bits sit inside the stage — update them without touching
+      // the <audio>/<video>/<iframe> elements themselves.
+      updateMediaStatusUI();
       attachListeners();
       return;
     }
@@ -1917,7 +1918,7 @@ function viewQuestion(){
           </div>
           <div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Запуститься одночасно на всіх пристроях</div>
         ` : `
-          <div style="font-size:13px; color:${r.ytPlaying ? 'var(--green)' : 'var(--ink-dim)'}; margin-top:8px;">
+          <div data-media-status="video" style="font-size:13px; color:${r.ytPlaying ? 'var(--green)' : 'var(--ink-dim)'}; margin-top:8px;">
             ${r.ytPlaying ? '▶ грає...' : '🎬 відео вмикає ведучий'}
           </div>
           ${(r.ytPlaying && state.ytBlocked) ? `
@@ -1936,7 +1937,7 @@ function viewQuestion(){
             <button class="btn btn-ghost btn-sm" data-action="stop-video-all">⏹ Зупинити</button>
           </div>
         ` : `
-          <div style="font-size:13px; color:${r.ytPlaying ? 'var(--green)' : 'var(--ink-dim)'}; margin-top:8px;">
+          <div data-media-status="video" style="font-size:13px; color:${r.ytPlaying ? 'var(--green)' : 'var(--ink-dim)'}; margin-top:8px;">
             ${r.ytPlaying ? '▶ грає...' : '🎬 відео вмикає ведучий'}
           </div>
         `}
@@ -1955,7 +1956,7 @@ function viewQuestion(){
               <button class="btn btn-accent btn-sm" data-action="play-audio-local">${icon('play',14)} Увімкнути звук</button>
               <div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Браузер заблокував автозапуск — натисни щоб почути</div>
             ` : `
-              <div style="font-size:14px; color:${r.audioPlaying ? 'var(--green)' : 'var(--ink-dim)'};">
+              <div data-media-status="audio" style="font-size:14px; color:${r.audioPlaying ? 'var(--green)' : 'var(--ink-dim)'};">
                 ${r.audioPlaying ? '▶ грає...' : '⏳ чекаємо на ведучого'}
               </div>
             `}
@@ -4127,6 +4128,21 @@ async function openBuzzAfterCountdown(){
   });
 }
 
+// Keeps the "video cover" and the play-status labels current without touching
+// the media elements (re-rendering those would restart playback).
+function updateMediaStatusUI(){
+  const r = state.room;
+  if (!r) return;
+  const cover = document.querySelector('.yt-poster-cover');
+  if (cover) cover.style.display = r.ytPlaying ? 'none' : 'flex';
+  document.querySelectorAll('[data-media-status]').forEach(el => {
+    const kind = el.getAttribute('data-media-status');
+    const on = kind === 'audio' ? !!r.audioPlaying : !!r.ytPlaying;
+    el.textContent = on ? '▶ грає...' : (kind === 'audio' ? '⏳ чекаємо на ведучого' : '🎬 відео вмикає ведучий');
+    el.style.color = on ? 'var(--green)' : 'var(--ink-dim)';
+  });
+}
+
 // ============== SYNCHRONISED YOUTUBE ==============
 let ytPlayer = null;
 let ytPlayerVid = null;
@@ -5534,6 +5550,7 @@ setInterval(() => {
   if (!r) return;
   syncAudioPlayback();
   syncVideoPlayback();
+  updateMediaStatusUI();
   const now = serverNow();
   // Failsafe grace: if the host doesn't advance a phase within 1.5s of the
   // deadline (host backgrounded, lagging, disconnected), any client triggers it.
