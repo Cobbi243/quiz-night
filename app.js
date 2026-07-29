@@ -87,8 +87,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.10';
+const APP_VERSION = '2.11';
 const CHANGELOG = [
+  { v: '2.11', date: '28.07.2026', changes: [
+    'Виправлено головну причину чому частина аудіопитань не грала',
+    'Різні MP3 сприймались як один файл, бо мають однаковий початок',
+  ]},
   { v: '2.10', date: '28.07.2026', changes: [
     'Переробка оновлення екрану: чат, модалки й статуси тепер живуть окремим шаром',
     'Заглушка на відео та підпис «грає» оновлюються без перезапуску медіа',
@@ -4276,18 +4280,24 @@ function syncAudioSource(){
   const r = state.room;
   const el = getGlobalAudio();
   let src = '';
+  let key = '';
   const finished = r && (r.revealAnswer || r.questionState === 'closed');
   if (r && r.status === 'question' && r.currentCell && r.pack && !finished) {
     const q = r.pack.categories?.[r.currentCell.ci]?.questions?.[r.currentCell.qi];
-    if (q && q.audio) src = q.audio;
+    if (q && q.audio) {
+      src = q.audio;
+      // Key on the cell, not on the data itself: different MP3s share the same
+      // base64 prefix, so comparing the start of the string wrongly matched them.
+      key = `${r.currentCell.ci}-${r.currentCell.qi}`;
+    }
   }
   if (!src) {
     if (el.src) { try { el.pause(); } catch(_){} el.removeAttribute('src'); el.load(); }
     return el;
   }
-  if (el.getAttribute('data-src-key') !== src.slice(0, 64)) {
+  if (el.getAttribute('data-src-key') !== key) {
     el.src = src;
-    el.setAttribute('data-src-key', src.slice(0, 64));
+    el.setAttribute('data-src-key', key);
     el.volume = (state.audioVolume ?? 1);
   }
   return el;
