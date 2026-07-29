@@ -87,8 +87,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.11';
+const APP_VERSION = '2.12';
 const CHANGELOG = [
+  { v: '2.12', date: '28.07.2026', changes: [
+    'Гравцям відео тепер взагалі не завантажується до запуску — превʼю не побачити',
+    'Плеєр створюється лише коли ведучий вмикає, і одразу починає грати',
+  ]},
   { v: '2.11', date: '28.07.2026', changes: [
     'Виправлено головну причину чому частина аудіопитань не грала',
     'Різні MP3 сприймались як один файл, бо мають однаковий початок',
@@ -1904,17 +1908,20 @@ function viewQuestion(){
   } else {
     stageBody = `
       ${q.youtube && q.youtube.id ? `
-        <div class="yt-wrap">
-          ${state.isHost ? `<div class="yt-title-cover"></div>` : `
-            <div class="yt-shade-top"></div>
-            <div class="yt-shade-bottom"></div>
-            ${!r.ytPlaying ? `<div class="yt-poster-cover">🎬 Відео вмикає ведучий</div>` : ''}
-            <div class="yt-block" title="Керує ведучий"></div>
-          `}
-          <iframe id="yt-frame" data-vid="${esc(q.youtube.id)}"
-            src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(location.origin)}${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
-            title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
-        </div>
+        ${(!state.isHost && !r.ytPlaying) ? `
+          <div class="yt-wrap"><div class="yt-poster-cover">🎬 Відео вмикає ведучий</div></div>
+        ` : `
+          <div class="yt-wrap">
+            ${state.isHost ? `<div class="yt-title-cover"></div>` : `
+              <div class="yt-shade-top"></div>
+              <div class="yt-shade-bottom"></div>
+              <div class="yt-block" title="Керує ведучий"></div>
+            `}
+            <iframe id="yt-frame" data-vid="${esc(q.youtube.id)}"
+              src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(location.origin)}${!state.isHost ? '&autoplay=1' : ''}${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
+              title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+          </div>
+        `}
         ${state.isHost ? `
           <div style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap;">
             <button class="btn btn-accent btn-sm" data-action="play-video-all">${icon('play',14)} Увімкнути для всіх</button>
@@ -1930,10 +1937,13 @@ function viewQuestion(){
           ` : ''}
         `}
       ` : ''}
+        `}
+      ` : ''}
       ${q.video ? `
         <div class="yt-wrap">
-          <video id="q-video" src="${q.video}" ${state.isHost ? 'controls' : ''} playsinline preload="auto" style="width:100%; height:100%; object-fit:contain; background:#000;"></video>
-          ${!state.isHost && !r.ytPlaying ? `<div class="yt-poster-cover">🎬 Відео вмикає ведучий</div>` : ''}
+          <video id="q-video" src="${q.video}" ${state.isHost ? 'controls' : ''} playsinline preload="auto"
+            style="width:100%; height:100%; object-fit:contain; background:#000;"></video>
+          ${(!state.isHost && !r.ytPlaying) ? `<div class="yt-poster-cover" style="z-index:5;">🎬 Відео вмикає ведучий</div>` : ''}
         </div>
         ${state.isHost ? `
           <div style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap;">
@@ -2130,6 +2140,7 @@ function viewQuestion(){
     r.revealAnswer ? 'ans' : 'q',
     r.questionState === 'dd_bid' ? 'ddbid' : '',
     state.isHost ? 'h' : 'p',
+    state.isHost ? '' : (r.ytPlaying ? 'vplay' : 'vstop'),
   ].join('|');
 
   return `
@@ -4137,8 +4148,7 @@ async function openBuzzAfterCountdown(){
 function updateMediaStatusUI(){
   const r = state.room;
   if (!r) return;
-  const cover = document.querySelector('.yt-poster-cover');
-  if (cover) cover.style.display = r.ytPlaying ? 'none' : 'flex';
+
   document.querySelectorAll('[data-media-status]').forEach(el => {
     const kind = el.getAttribute('data-media-status');
     const on = kind === 'audio' ? !!r.audioPlaying : !!r.ytPlaying;
