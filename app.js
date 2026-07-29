@@ -87,8 +87,11 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.12';
+const APP_VERSION = '2.13';
 const CHANGELOG = [
+  { v: '2.13', date: '28.07.2026', changes: [
+    'Терміново: виправлено помилку через яку сайт не завантажувався',
+  ]},
   { v: '2.12', date: '28.07.2026', changes: [
     'Гравцям відео тепер взагалі не завантажується до запуску — превʼю не побачити',
     'Плеєр створюється лише коли ведучий вмикає, і одразу починає грати',
@@ -1935,8 +1938,6 @@ function viewQuestion(){
           ${(r.ytPlaying && state.ytBlocked) ? `
             <button class="btn btn-accent btn-sm" data-action="play-video-local" style="margin-top:8px;">${icon('play',14)} Не грає? Натисни</button>
           ` : ''}
-        `}
-      ` : ''}
         `}
       ` : ''}
       ${q.video ? `
