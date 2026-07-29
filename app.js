@@ -87,8 +87,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.07';
+const APP_VERSION = '2.08';
 const CHANGELOG = [
+  { v: '2.08', date: '28.07.2026', changes: [
+    'Виправлено: чорна заглушка на відео більше не зникає через секунду',
+    'Виправлено: аудіо тепер запускається щоразу, без потреби тиснути «Зупинити»',
+  ]},
   { v: '2.07', date: '28.07.2026', changes: [
     'Прибрано блимання під час питання — екран більше не перемальовується повністю',
     'Відео й аудіо більше не переривається коли хтось натискає базер',
@@ -3742,7 +3746,15 @@ function attachRoomListener(code){
     const prevCell = state.room?.currentCell;
     const newCell = data.currentCell;
     const cellChanged = JSON.stringify(prevCell) !== JSON.stringify(newCell);
-    if (cellChanged) { state.lastBuzzAttempt = 0; state.buzzCooldownUntil = 0; }
+    if (cellChanged) {
+      state.lastBuzzAttempt = 0; state.buzzCooldownUntil = 0;
+      // Forget which play/stop requests we've already handled so the next
+      // question's media starts reliably.
+      state.lastAudioToken = null; state.lastAudioStopToken = null;
+      state.lastYtToken = null; state.lastYtStopToken = null;
+      state.audioPending = false; state.ytPending = false;
+      state.audioBlocked = false; state.ytBlocked = false;
+    }
     state.room = data;
     // Record this game into the player's profile once the results are shown
     if (data.status === 'results') saveGameResult();
@@ -3995,7 +4007,11 @@ async function pickCell(ci, qi){
     countdownDeadline: null,
     revealAnswer: false,
     phaseStartedAt: now,
-    status: 'question'
+    status: 'question',
+    // Clear any leftover media state from the previous question, otherwise the
+    // next one inherits "already playing" and skips its cover / start request.
+    audioPlaying: false, audioToken: null, audioPlayAt: null, audioStopToken: null,
+    ytPlaying: false, ytToken: null, ytPlayAt: null, ytStopToken: null,
   };
 
   if (isDD) {
@@ -4215,33 +4231,38 @@ async function stopAudioForAll(){
 function syncAudioPlayback(){
   const r = state.room;
   if (!r) return;
-  const el = syncAudioSource();
-  if (!el || !el.src) return;
 
-  // Stop requested
+  // Register requests first — they must survive the file still loading
+  let wantStop = false;
   if (r.audioStopToken && state.lastAudioStopToken !== r.audioStopToken) {
     state.lastAudioStopToken = r.audioStopToken;
-    try { el.pause(); el.currentTime = 0; } catch (_) {}
-    state.audioBlocked = false;
-    return;
+    state.audioPending = false;
+    wantStop = true;
   }
-  // New play request
   if (r.audioToken && state.lastAudioToken !== r.audioToken) {
     state.lastAudioToken = r.audioToken;
     state.audioPending = true;
     state.audioBlocked = false;
   }
+
+  const el = syncAudioSource();
+  if (!el || !el.src) return;   // nothing to play (or not loaded yet) — retry next tick
+
+  if (wantStop) {
+    try { el.pause(); el.currentTime = 0; } catch (_) {}
+    state.audioBlocked = false;
+    return;
+  }
+
   if (state.audioPending && r.audioPlayAt && serverNow() >= r.audioPlayAt) {
+    // Wait until the file has enough data, otherwise play() can silently fail
+    if (el.readyState < 2) { try { el.load(); } catch (_) {} return; }
     state.audioPending = false;
     try {
       el.currentTime = 0;
       const pr = el.play();
       if (pr && pr.catch) {
-        pr.catch(() => {
-          // Browser blocked autoplay — show a manual button instead
-          state.audioBlocked = true;
-          render(true);
-        });
+        pr.catch(() => { state.audioBlocked = true; render(true); });
       }
     } catch (_) {
       state.audioBlocked = true;
