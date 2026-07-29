@@ -235,7 +235,11 @@ html, body {
 .cell-img-icon {
   position: absolute; top: 6px; right: 6px;
   color: var(--gold); opacity: 0.45;
-  display: flex; pointer-events: none;
+  display: flex; align-items: center; gap: 3px;
+  pointer-events: none;
+  /* Emoji markers inherit the cell's huge font size otherwise */
+  font-size: 12px; line-height: 1;
+  text-shadow: none;
 }
 
 .player-bar { display: flex; gap: 12px; margin-top: 24px; overflow-x: auto; padding-bottom: 8px; }
@@ -835,6 +839,6 @@ html, body {
 </div>
 <div id="overlay-root"></div>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script type="module" src="app.js?v=202607281210"></script>
+<script type="module" src="app.js?v=202607281225"></script>
 </body>
 </html>
