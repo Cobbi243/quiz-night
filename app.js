@@ -87,8 +87,11 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.16';
+const APP_VERSION = '2.17';
 const CHANGELOG = [
+  { v: '2.17', date: '28.07.2026', changes: [
+    'Ведучий бачить відео без жодних масок — назва й усі кнопки на місці',
+  ]},
   { v: '2.16', date: '28.07.2026', changes: [
     'У «Своїй грі» після ставки спершу йде час на прочитання питання',
     'Відлік на відповідь починається коли гравець натисне «Готовий відповідати»',
@@ -1926,7 +1929,7 @@ function viewQuestion(){
           <div class="yt-wrap"><div class="yt-poster-cover">🎬 Відео вмикає ведучий</div></div>
         ` : `
           <div class="yt-wrap">
-            ${state.isHost ? `<div class="yt-title-cover"></div>` : `
+            ${state.isHost ? '' : `
               <div class="yt-shade-top"></div>
               <div class="yt-shade-bottom"></div>
               <div class="yt-block" title="Керує ведучий"></div>
