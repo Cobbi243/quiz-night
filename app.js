@@ -87,8 +87,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.15';
+const APP_VERSION = '2.16';
 const CHANGELOG = [
+  { v: '2.16', date: '28.07.2026', changes: [
+    'У «Своїй грі» після ставки спершу йде час на прочитання питання',
+    'Відлік на відповідь починається коли гравець натисне «Готовий відповідати»',
+  ]},
   { v: '2.15', date: '28.07.2026', changes: [
     'У «Своїй грі» таймер більше не йде поки гравець робить ставку',
     'Відлік на відповідь стартує лише після підтвердження ставки',
@@ -2005,7 +2009,7 @@ function viewQuestion(){
   // --- TIMER BAR ---
   const timerBar = (() => {
     const now = serverNow();
-    if (r.questionState === 'buzzing') {
+    if (r.questionState === 'buzzing' || r.questionState === 'dd_buzz') {
       const total = buzzSec(r);
       const deadline = r.buzzPhaseDeadline || (now + total * 1000);
       const sec = Math.max(0, Math.ceil((deadline - now) / 1000));
@@ -2050,6 +2054,21 @@ function viewQuestion(){
       controls += `<div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:8px;">
         ⏳ ${ddP ? esc(ddP.name) : 'Гравець'} робить ставку...
       </div>`;
+    }
+  }
+
+  if (r.questionState === 'dd_buzz') {
+    const bet = typeof r.ddBid === 'number' ? r.ddBid : 0;
+    const mine = state.myId === r.ddPlayer;
+    controls += `<div style="text-align:center; font-size:13px; color:var(--gold); margin-bottom:6px;">🎲 Ставка ${bet} · відповідає ${ddP ? esc(ddP.name) : ''}</div>`;
+    if (mine) {
+      controls += `<button class="buzz-btn" data-action="dd-buzz">ГОТОВИЙ ВІДПОВІДАТИ</button>
+        <div style="text-align:center; font-size:12px; color:var(--ink-dim);">або натисни <b>Пробіл</b></div>`;
+    } else if (state.isHost) {
+      controls += `<div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:8px;">Гравець читає питання...</div>
+        <div style="text-align:center;"><button class="btn btn-ghost btn-sm" data-action="dd-buzz">Почати відлік відповіді</button></div>`;
+    } else {
+      controls += `<div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:8px;">Читає ${ddP ? esc(ddP.name) : 'гравець'}...</div>`;
     }
   }
 
@@ -3494,6 +3513,7 @@ async function handleAction(e){
     case 'pick-cell': await pickCell(parseInt(el.dataset.ci,10), parseInt(el.dataset.qi,10)); break;
     case 'open-buzz': await openBuzz(); break;
     case 'buzz': await buzz(); break;
+    case 'dd-buzz': await ddBuzz(); break;
     case 'resync': await resyncRoom(); break;
     case 'judge': await judge(el.dataset.correct); break;
     case 'reveal-answer': await revealAnswer(); break;
@@ -4714,9 +4734,52 @@ async function submitDDBid(){
   await update(ref(db, `rooms/${state.code}`), {
     ddBid: bid,
     ddBidSubmitted: true,
+    questionState: 'dd_buzz',                    // time to read the question
+    buzzPhaseDeadline: now + buzzSec(r) * 1000,
+    answerPhaseDeadline: null,
+    phaseStartedAt: now,
+  });
+}
+
+// Daily Double: the chosen player says they're ready — start the answer clock
+async function ddBuzz(){
+  const r = state.room;
+  if (!r) return;
+  if (r.questionState !== 'dd_buzz') return;
+  if (!state.isHost && state.myId !== r.ddPlayer) return;
+  const now = serverNow();
+  await update(ref(db, `rooms/${state.code}`), {
     questionState: 'dd_answer',
     answerPhaseDeadline: now + answerSec(r) * 1000,
+    buzzPhaseDeadline: null,
     phaseStartedAt: now,
+  });
+}
+
+// Nobody pressed in time — counts as a wrong answer
+async function timeoutDDBuzz(){
+  const fresh = await getRoom(state.code);
+  if (!fresh || fresh.questionState !== 'dd_buzz') return;
+  if (!fresh.buzzPhaseDeadline || serverNow() < fresh.buzzPhaseDeadline) return;
+  if (fresh.phaseStartedAt && serverNow() - fresh.phaseStartedAt < 1500) return;
+  const cell = fresh.currentCell; if (!cell) return;
+  const bet = typeof fresh.ddBid === 'number' ? fresh.ddBid : 0;
+  const pl = { ...fresh.players };
+  const sid = fresh.ddPlayer;
+  const ts = { ...(fresh.teamScores || {}) };
+  if (sid && pl[sid]) pl[sid] = { ...pl[sid], score: (pl[sid].score || 0) - bet };
+  if (isTeamMode(fresh)) {
+    const t = pl[sid]?.teamId;
+    if (t) ts[t] = (ts[t] || 0) - bet;
+  }
+  await update(ref(db, `rooms/${state.code}`), {
+    players: pl,
+    ...(isTeamMode(fresh) ? { teamScores: ts } : {}),
+    [`usedCells/${cell.ci}-${cell.qi}`]: true,
+    questionState: 'closed',
+    revealAnswer: true,
+    buzzPhaseDeadline: null,
+    answerPhaseDeadline: null,
   });
 }
 
@@ -5556,7 +5619,7 @@ function updateTimerOnly(){
     return;
   }
   let sec, total;
-  if (r.status === 'question' && r.questionState === 'buzzing') {
+  if (r.status === 'question' && (r.questionState === 'buzzing' || r.questionState === 'dd_buzz')) {
     total = buzzSec(r);
     const deadline = r.buzzPhaseDeadline || (now + total * 1000);
     sec = Math.max(0, Math.ceil((deadline - now) / 1000));
@@ -5597,6 +5660,12 @@ setInterval(() => {
     if (r.questionState === 'countdown') {
       if (r.countdownDeadline && now >= r.countdownDeadline + BUF) {
         if (state.isHost || (state.clockSynced && now >= r.countdownDeadline + GRACE)) openBuzzAfterCountdown();
+      } else {
+        updateTimerOnly();
+      }
+    } else if (r.questionState === 'dd_buzz') {
+      if (r.buzzPhaseDeadline && now >= r.buzzPhaseDeadline + BUF) {
+        if (state.isHost || (state.clockSynced && now >= r.buzzPhaseDeadline + GRACE)) timeoutDDBuzz();
       } else {
         updateTimerOnly();
       }
