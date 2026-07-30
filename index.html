@@ -760,6 +760,17 @@ html, body {
   background: #000; z-index: 2; pointer-events: none;
 }
 
+/* Marker shown while a practice game is running */
+.test-badge {
+  position: fixed; top: 12px; left: 12px; z-index: 90;
+  background: rgba(232,74,48,0.15);
+  border: 1px solid rgba(232,74,48,0.5);
+  color: var(--accent);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  padding: 5px 12px; border-radius: 999px;
+  backdrop-filter: blur(8px); pointer-events: none;
+}
+
 /* Uploaded avatar pictures */
 .avatar-img {
   width: 1.15em; height: 1.15em;
@@ -839,6 +850,6 @@ html, body {
 </div>
 <div id="overlay-root"></div>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script type="module" src="app.js?v=202607281345"></script>
+<script type="module" src="app.js?v=202607281400"></script>
 </body>
 </html>

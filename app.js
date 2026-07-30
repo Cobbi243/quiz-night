@@ -87,8 +87,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.17';
+const APP_VERSION = '2.18';
 const CHANGELOG = [
+  { v: '2.18', date: '28.07.2026', changes: [
+    'Додано режим тестової гри — результати не потрапляють у статистику',
+    'Зручно щоб перевірити свій пак і нічого не зіпсувати',
+  ]},
   { v: '2.17', date: '28.07.2026', changes: [
     'Ведучий бачить відео без жодних масок — назва й усі кнопки на місці',
   ]},
@@ -439,6 +443,7 @@ let state = {
   setupAntiSpam: false,      // hardcore: 1s cooldown between buzz attempts
   setupTeamMode: false,      // play in teams instead of individuals
   setupTeamCount: 2,         // 2-4 teams
+  setupTestMode: false,      // practice run: nothing is recorded
   setupDailyDouble: false,   // hidden "your bet" cells
   setupDDCount: 1,           // how many per round
   ddBidLocal: 0,             // local bet input for daily double
@@ -1055,6 +1060,7 @@ function computeHash(){
     setupAntiSpam: state.setupAntiSpam,
     setupTeamMode: state.setupTeamMode,
     setupTeamCount: state.setupTeamCount,
+    setupTestMode: state.setupTestMode,
     setupDailyDouble: state.setupDailyDouble,
     setupDDCount: state.setupDDCount,
     ddBidLocal: state.ddBidLocal,
@@ -1074,6 +1080,7 @@ function computeHash(){
       status: r.status, hostId: r.hostId,
       players: r.players, currentCell: r.currentCell,
       teamModeConfig: r.teamModeConfig, teamCountConfig: r.teamCountConfig, teamScores: r.teamScores,
+      testModeConfig: r.testModeConfig,
       dailyDoubles: r.dailyDoubles, ddPlayer: r.ddPlayer, ddBid: r.ddBid, ddBidSubmitted: r.ddBidSubmitted,
       audioPlaying: r.audioPlaying, audioToken: r.audioToken, audioStopToken: r.audioStopToken,
       ytPlaying: r.ytPlaying, ytToken: r.ytToken, ytStopToken: r.ytStopToken,
@@ -1174,6 +1181,9 @@ function render(force){
   if (state.showFormatHelp) overlay += viewFormatHelpModal();
   if (state.showChangelog) overlay += viewChangelogModal();
   overlay += `<button class="version-badge" data-action="show-changelog" title="Що нового">v${APP_VERSION}</button>`;
+  if (state.room && state.room.testModeConfig) {
+    overlay += `<div class="test-badge" title="Результати не зберігаються">🧪 ТЕСТОВА ГРА</div>`;
+  }
   overlay += `<input type="file" id="audio-input" accept="audio/*" style="display:none;">`;
   overlay += `<input type="file" id="video-input" accept="video/*" style="display:none;">`;
   overlay += `<input type="file" id="avatar-input" accept="image/*" style="display:none;">`;
@@ -1498,6 +1508,12 @@ function viewModeSelect(){
             <div class="timer-chip-row">${[1,2].map(n => `<button class="timer-chip ${state.setupDDCount===n?'active':''}" data-action="set-dd-count" data-count="${n}">${n}</button>`).join('')}</div>
             <div class="info-text" style="margin-top:10px;">Хто відкриє таку клітинку — ставить свої бали і відповідає сам, без базера.</div>
           ` : ''}
+
+          <div style="font-size:13px; color:var(--ink-dim); margin-top:16px; margin-bottom:8px;">🧪 ТЕСТОВА ГРА</div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <button class="timer-chip ${!state.setupTestMode ? 'active' : ''}" data-action="set-test-mode" data-test="0" style="text-align:left;">Звичайна гра — результати зберігаються</button>
+            <button class="timer-chip ${state.setupTestMode ? 'active' : ''}" data-action="set-test-mode" data-test="1" style="text-align:left;">🧪 Тест пака — нічого не записується в статистику</button>
+          </div>
         </div>
 
         ${state.setupErr ? `<div class="err-text" style="margin-bottom:12px;">${esc(state.setupErr)}</div>` : ''}
@@ -3463,6 +3479,9 @@ async function handleAction(e){
         }).catch(()=>{});
       }
       render(true); break;
+    case 'set-test-mode':
+      state.setupTestMode = el.dataset.test === '1';
+      render(true); break;
     case 'set-dd':
       state.setupDailyDouble = el.dataset.dd === '1';
       render(true); break;
@@ -4061,6 +4080,7 @@ async function startGame(pack){
     patch.answerSecondsConfig = state.setupAnswerSeconds || ANSWER_SECONDS;
     patch.buzzModeConfig = state.setupBuzzMode || 'instant';
     patch.antiSpamConfig = !!state.setupAntiSpam;
+    patch.testModeConfig = !!state.setupTestMode;
     patch.teamModeConfig = !!state.setupTeamMode;
     patch.teamCountConfig = state.setupTeamMode ? (state.setupTeamCount || 2) : null;
     if (state.setupTeamMode) {
@@ -4523,6 +4543,7 @@ async function loadMyHostProfile(){
 async function saveHostResult(){
   const r = state.room;
   if (!r || !state.myId || !r.gameId) return;
+  if (r.testModeConfig) return;            // practice run — record nothing
   if (state.savedGameId === r.gameId) return;
   state.savedGameId = r.gameId;
   try {
@@ -4573,6 +4594,7 @@ async function saveGameResult(){
   const r = state.room;
   if (!r || !state.myId) return;
   if (!r.gameId) return;
+  if (r.testModeConfig) return;            // practice run — record nothing
   if (state.isHost) return saveHostResult();
   if (state.savedGameId === r.gameId) return;      // already saved this session
   state.savedGameId = r.gameId;
