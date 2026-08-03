@@ -87,8 +87,11 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.24';
+const APP_VERSION = '2.25';
 const CHANGELOG = [
+  { v: '2.25', date: '01.08.2026', changes: [
+    'Тимчасово: під відео показується діагностичний рядок щоб знайти причину',
+  ]},
   { v: '2.24', date: '01.08.2026', changes: [
     'Відео тепер запускається напряму, без службового інтерфейсу YouTube',
     'У гравців стартує без звуку (це дозволяють усі браузери), звук — одним дотиком',
@@ -1980,7 +1983,9 @@ function viewQuestion(){
             <button class="btn btn-ghost btn-sm" data-action="stop-video-all">⏹ Зупинити</button>
           </div>
           <div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Запуститься одночасно на всіх пристроях</div>
+          <div id="yt-debug" style="font-family:ui-monospace,monospace; font-size:11px; color:var(--gold); background:rgba(240,180,41,0.08); border:1px solid rgba(240,180,41,0.3); border-radius:8px; padding:6px 10px; margin-top:8px; word-break:break-all;">діагностика…</div>
         ` : `
+          <div id="yt-debug" style="font-family:ui-monospace,monospace; font-size:11px; color:var(--gold); background:rgba(240,180,41,0.08); border:1px solid rgba(240,180,41,0.3); border-radius:8px; padding:6px 10px; margin-top:8px; word-break:break-all;">діагностика…</div>
           <div data-media-status="video" style="font-size:13px; color:${r.ytPlaying ? 'var(--green)' : 'var(--ink-dim)'}; margin-top:8px;">
             ${r.ytPlaying ? '▶ грає...' : '🎬 відео вмикає ведучий'}
           </div>
@@ -2001,6 +2006,7 @@ function viewQuestion(){
             <button class="btn btn-ghost btn-sm" data-action="stop-video-all">⏹ Зупинити</button>
           </div>
         ` : `
+          <div id="yt-debug" style="font-family:ui-monospace,monospace; font-size:11px; color:var(--gold); background:rgba(240,180,41,0.08); border:1px solid rgba(240,180,41,0.3); border-radius:8px; padding:6px 10px; margin-top:8px; word-break:break-all;">діагностика…</div>
           <div data-media-status="video" style="font-size:13px; color:${r.ytPlaying ? 'var(--green)' : 'var(--ink-dim)'}; margin-top:8px;">
             ${r.ytPlaying ? '▶ грає...' : '🎬 відео вмикає ведучий'}
           </div>
@@ -2015,6 +2021,7 @@ function viewQuestion(){
               <button class="btn btn-ghost btn-sm" data-action="stop-audio-all">⏹ Зупинити</button>
             </div>
             <div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Запуститься одночасно на всіх пристроях</div>
+          <div id="yt-debug" style="font-family:ui-monospace,monospace; font-size:11px; color:var(--gold); background:rgba(240,180,41,0.08); border:1px solid rgba(240,180,41,0.3); border-radius:8px; padding:6px 10px; margin-top:8px; word-break:break-all;">діагностика…</div>
           ` : `
             ${state.audioBlocked ? `
               <button class="btn btn-accent btn-sm" data-action="play-audio-local">${icon('play',14)} Увімкнути звук</button>
@@ -4226,6 +4233,19 @@ async function openBuzzAfterCountdown(){
 function updateMediaStatusUI(){
   const r = state.room;
   if (!r) return;
+  const dbg = document.getElementById('yt-debug');
+  if (dbg) {
+    const frame = document.getElementById('yt-frame');
+    const delta = r.ytPlayAt ? Math.round((serverNow() - r.ytPlayAt) / 100) / 10 : null;
+    dbg.textContent =
+      `${state.isHost ? 'ВЕДУЧИЙ' : 'ГРАВЕЦЬ'} | playing=${r.ytPlaying ? 'так' : 'ні'}` +
+      ` | token=${r.ytToken ? String(r.ytToken).slice(0,4) : '—'}` +
+      ` | мій=${state.lastYtToken ? String(state.lastYtToken).slice(0,4) : '—'}` +
+      ` | pending=${state.ytPending ? 'так' : 'ні'}` +
+      ` | frame=${frame ? 'є' : 'НЕМА'}` +
+      ` | Δ=${delta === null ? '—' : delta + 'с'}` +
+      ` | src=${frame ? (frame.src.includes('autoplay=1') ? 'autoplay' : 'звичайний') : '—'}`;
+  }
   const cover = document.querySelector('.yt-poster-cover');
   if (cover) cover.style.display = r.ytPlaying ? 'none' : 'flex';
 
