@@ -87,8 +87,11 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.22';
+const APP_VERSION = '2.23';
 const CHANGELOG = [
+  { v: '2.23', date: '01.08.2026', changes: [
+    'Знайдено справжню причину: плеєр пересоздавався 4 рази на секунду і не встигав запуститись',
+  ]},
   { v: '2.22', date: '01.08.2026', changes: [
     'Повернуто робочий спосіб відтворення відео у гравців (відкат моєї регресії)',
   ]},
@@ -4240,7 +4243,7 @@ function updateMediaStatusUI(){
 
 // ============== SYNCHRONISED YOUTUBE ==============
 let ytPlayer = null;
-let ytPlayerVid = null;
+let ytBoundFrame = null;
 let ytReady = false;
 // The API script loads before this module, so its ready-callback may fire before
 // we could assign a handler. We therefore poll for window.YT instead of relying
@@ -4250,20 +4253,16 @@ window.onYouTubeIframeAPIReady = function(){ /* handled by polling below */ };
 function ensureYtPlayer(){
   if (!window.YT || typeof window.YT.Player !== 'function') return null;
   const frame = document.getElementById('yt-frame');
-  if (!frame) { ytPlayer = null; ytPlayerVid = null; ytReady = false; return null; }
-  const vid = frame.getAttribute('data-vid');
+  if (!frame) { ytPlayer = null; ytBoundFrame = null; ytReady = false; return null; }
 
-  let sameFrame = false;
-  try { sameFrame = !!(ytPlayer && ytPlayer.getIframe && ytPlayer.getIframe() === frame); } catch (_) {}
+  // Bind once per iframe element. We track the binding ourselves — asking the
+  // player object would fail before it finishes loading, which previously made
+  // us rebuild it on every tick so it never became ready.
+  if (ytBoundFrame === frame) return ytReady ? ytPlayer : null;
 
-  if (sameFrame && ytPlayerVid === vid) {
-    return ytReady ? ytPlayer : null;   // still initialising — try again next tick
-  }
-
-  // Bind a fresh player to this iframe
+  ytBoundFrame = frame;
+  ytReady = false;
   try {
-    ytReady = false;
-    ytPlayerVid = vid;
     ytPlayer = new window.YT.Player(frame, {
       events: {
         onReady: () => { ytReady = true; },
@@ -4271,7 +4270,7 @@ function ensureYtPlayer(){
       }
     });
   } catch (_) {
-    ytPlayer = null; ytPlayerVid = null; ytReady = false;
+    ytPlayer = null; ytBoundFrame = null; ytReady = false;
   }
   return null;
 }
