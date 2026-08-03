@@ -87,8 +87,13 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.18';
+const APP_VERSION = '2.19';
 const CHANGELOG = [
+  { v: '2.19', date: '01.08.2026', changes: [
+    'Чорні смуги на відео тепер підлаштовуються під розмір екрану — на телефоні не перекривають картинку',
+    'Додано 7 нових досягнень: аудіо, відео, 500 правильних, 30 за гру, і за загальні бали',
+    'У статистиці зʼявились лічильники аудіо/відео відповідей і всього набраних балів',
+  ]},
   { v: '2.18', date: '28.07.2026', changes: [
     'Додано режим тестової гри — результати не потрапляють у статистику',
     'Зручно щоб перевірити свій пак і нічого не зіпсувати',
@@ -2882,6 +2887,9 @@ function viewStats(){
           ${stat('ПОМИЛОК', prof.wrong || 0, 'var(--accent)')}
           ${stat('БАЗЕРІВ', prof.buzzes || 0, 'var(--ink)')}
           ${stat('СВОЇХ ІГОР', prof.ddWins || 0)}
+          ${stat('АУДІО 🎧', prof.audioCorrect || 0, 'var(--ink)')}
+          ${stat('ВІДЕО 📺', prof.mediaCorrect || 0, 'var(--ink)')}
+          ${stat('ВСЬОГО БАЛІВ', prof.totalScore || 0, 'var(--gold)')}
         </div>
 
         ${(() => {
@@ -4641,6 +4649,8 @@ async function saveGameResult(){
       won, place,
       teamMode,
       correct: gs.correct || 0,
+      audioCorrect: gs.audioCorrect || 0,
+      mediaCorrect: gs.mediaCorrect || 0,
       wrong: gs.wrong || 0,
       buzzes: gs.buzzes || 0,
       ddWins: gs.ddWins || 0,
@@ -4654,6 +4664,7 @@ async function saveGameResult(){
       name: me.name, avatar: me.avatar,
       games: 0, wins: 0, totalScore: 0, bestScore: 0,
       correct: 0, wrong: 0, buzzes: 0, ddWins: 0, finalWins: 0,
+      audioCorrect: 0, mediaCorrect: 0,
       worstScore: null,
       sumR1: 0, cntR1: 0, sumR2: 0, cntR2: 0, sumR3: 0, cntR3: 0,
       finalsPlayed: 0,
@@ -4665,6 +4676,8 @@ async function saveGameResult(){
     prof.totalScore = (prof.totalScore || 0) + myFinalScore;
     prof.bestScore = Math.max(prof.bestScore || 0, myFinalScore);
     prof.correct = (prof.correct || 0) + entry.correct;
+    prof.audioCorrect = (prof.audioCorrect || 0) + entry.audioCorrect;
+    prof.mediaCorrect = (prof.mediaCorrect || 0) + entry.mediaCorrect;
     prof.wrong = (prof.wrong || 0) + entry.wrong;
     prof.buzzes = (prof.buzzes || 0) + entry.buzzes;
     prof.ddWins = (prof.ddWins || 0) + entry.ddWins;
@@ -4696,6 +4709,13 @@ async function saveGameResult(){
     if (prof.correct >= 100) unlock('correct_100');
     if (won && teamMode) unlock('team_player');
     if (prof.games >= 25) unlock('veteran');
+    if ((prof.audioCorrect || 0) >= 20) unlock('audio_20');
+    if ((prof.mediaCorrect || 0) >= 20) unlock('media_20');
+    if ((prof.correct || 0) >= 500) unlock('correct_500');
+    if (entry.correct >= 30) unlock('game_30');
+    if ((prof.totalScore || 0) >= 100000) unlock('total_100k');
+    if ((prof.totalScore || 0) >= 300000) unlock('total_300k');
+    if ((prof.totalScore || 0) >= 1000000) unlock('total_1m');
     // Win streak
     prof.streak = won ? ((prof.streak || 0) + 1) : 0;
     if (prof.streak >= 3) unlock('streak_3');
@@ -4933,6 +4953,8 @@ async function judge(correctStr){
     patch.currentPicker = scorerId || buzzedId;
     if (scorerId) {
       patch[`gameStats/${scorerId}/correct`] = ((r.gameStats?.[scorerId]?.correct) || 0) + 1;
+      if (q.audio) patch[`gameStats/${scorerId}/audioCorrect`] = ((r.gameStats?.[scorerId]?.audioCorrect) || 0) + 1;
+      if (q.video || q.youtube) patch[`gameStats/${scorerId}/mediaCorrect`] = ((r.gameStats?.[scorerId]?.mediaCorrect) || 0) + 1;
       patch[`gameStats/${scorerId}/earned`] = ((r.gameStats?.[scorerId]?.earned) || 0) + stake;
       if (isDD) patch[`gameStats/${scorerId}/ddWins`] = ((r.gameStats?.[scorerId]?.ddWins) || 0) + 1;
     }
