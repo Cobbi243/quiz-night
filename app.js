@@ -87,8 +87,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.20';
+const APP_VERSION = '2.21';
 const CHANGELOG = [
+  { v: '2.21', date: '01.08.2026', changes: [
+    'Терміново: відео у гравців не запускалось через заборону автозапуску в браузерах',
+    'Тепер стартує без звуку, а поруч кнопка «Увімкнути звук / запустити»',
+  ]},
   { v: '2.20', date: '01.08.2026', changes: [
     'Виправлено: нові досягнення не показувались у списку (тепер їх 27)',
   ]},
@@ -1959,7 +1963,7 @@ function viewQuestion(){
               <div class="yt-block" title="Керує ведучий"></div>
             `}
             <iframe id="yt-frame" data-vid="${esc(q.youtube.id)}"
-              src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(location.origin)}${!state.isHost ? '&autoplay=1' : ''}${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
+              src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(location.origin)}${!state.isHost ? '&autoplay=1&mute=1' : ''}${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
               title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
           </div>
         `}
@@ -1973,14 +1977,14 @@ function viewQuestion(){
           <div data-media-status="video" style="font-size:13px; color:${r.ytPlaying ? 'var(--green)' : 'var(--ink-dim)'}; margin-top:8px;">
             ${r.ytPlaying ? '▶ грає...' : '🎬 відео вмикає ведучий'}
           </div>
-          ${(r.ytPlaying && state.ytBlocked) ? `
-            <button class="btn btn-accent btn-sm" data-action="play-video-local" style="margin-top:8px;">${icon('play',14)} Не грає? Натисни</button>
+          ${r.ytPlaying ? `
+            <button class="btn btn-accent btn-sm" data-action="play-video-local" style="margin-top:8px;">🔊 Увімкнути звук / запустити</button>
           ` : ''}
         `}
       ` : ''}
       ${q.video ? `
         <div class="yt-wrap">
-          <video id="q-video" src="${q.video}" ${state.isHost ? 'controls' : ''} playsinline preload="auto"
+          <video id="q-video" src="${q.video}" ${state.isHost ? 'controls' : 'muted'} playsinline preload="auto"
             style="width:100%; height:100%; object-fit:contain; background:#000;"></video>
           ${(!state.isHost && !r.ytPlaying) ? `<div class="yt-poster-cover" style="z-index:5;">🎬 Відео вмикає ведучий</div>` : ''}
         </div>
@@ -3628,7 +3632,18 @@ async function handleAction(e){
     }
     case 'play-video-local': {
       const p2 = ensureYtPlayer();
-      try { if (p2 && p2.playVideo) { p2.playVideo(); state.ytBlocked = false; render(true); } } catch(_){}
+      try {
+        if (p2 && p2.playVideo) {
+          if (p2.unMute) p2.unMute();
+          if (p2.setVolume) p2.setVolume(100);
+          p2.playVideo();
+        }
+      } catch(_){}
+      // uploaded video files too
+      const vv = document.getElementById('q-video');
+      if (vv) { try { vv.muted = false; vv.play(); } catch(_){} }
+      state.ytBlocked = false;
+      render(true);
       break;
     }
     case 'play-video-all': await playVideoForAll(); break;
