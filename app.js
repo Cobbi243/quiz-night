@@ -87,8 +87,14 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.25';
+const APP_VERSION = '2.27';
 const CHANGELOG = [
+  { v: '2.27', date: '01.08.2026', changes: [
+    'Виправлено помилку YouTube 153 — прибрано зайві параметри вбудовування',
+  ]},
+  { v: '2.26', date: '01.08.2026', changes: [
+    'Діагностика показує чи команда «увімкнути» взагалі записується в кімнату',
+  ]},
   { v: '2.25', date: '01.08.2026', changes: [
     'Тимчасово: під відео показується діагностичний рядок щоб знайти причину',
   ]},
@@ -1974,7 +1980,7 @@ function viewQuestion(){
             ${!r.ytPlaying ? `<div class="yt-poster-cover">🎬 Відео вмикає ведучий</div>` : ''}
           `}
           <iframe id="yt-frame" data-vid="${esc(q.youtube.id)}" data-start="${q.youtube.start || ''}" data-end="${q.youtube.end || ''}"
-            src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(location.origin)}${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
+            src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
             title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
         </div>
         ${state.isHost ? `
@@ -4244,7 +4250,8 @@ function updateMediaStatusUI(){
       ` | pending=${state.ytPending ? 'так' : 'ні'}` +
       ` | frame=${frame ? 'є' : 'НЕМА'}` +
       ` | Δ=${delta === null ? '—' : delta + 'с'}` +
-      ` | src=${frame ? (frame.src.includes('autoplay=1') ? 'autoplay' : 'звичайний') : '—'}`;
+      ` | src=${frame ? (frame.src.includes('autoplay=1') ? 'autoplay' : 'звичайний') : '—'}` +
+      (state.isHost ? ` | запис=${state.ytWrite || 'ще не тиснув'}` : '');
   }
   const cover = document.querySelector('.yt-poster-cover');
   if (cover) cover.style.display = r.ytPlaying ? 'none' : 'flex';
@@ -4292,12 +4299,18 @@ function ensureYtPlayer(){
 }
 
 async function playVideoForAll(){
-  if (!state.isHost || !state.code) return;
-  await update(ref(db, `rooms/${state.code}`), {
-    ytToken: genId(),
-    ytPlayAt: serverNow() + 700,
-    ytPlaying: true,
-  });
+  if (!state.isHost || !state.code) { state.ytWrite = 'не ведучий/нема коду'; return; }
+  try {
+    await update(ref(db, `rooms/${state.code}`), {
+      ytToken: genId(),
+      ytPlayAt: serverNow() + 700,
+      ytPlaying: true,
+    });
+    state.ytWrite = 'записано';
+  } catch (e) {
+    state.ytWrite = 'ПОМИЛКА: ' + (e && e.message ? e.message : e);
+    console.error('[playVideoForAll]', e);
+  }
 }
 
 async function stopVideoForAll(){
@@ -4362,7 +4375,7 @@ function ytEmbedUrl(frame, opts){
   const vid = frame.getAttribute('data-vid') || '';
   const st = frame.getAttribute('data-start') || '';
   const en = frame.getAttribute('data-end') || '';
-  let u = `https://www.youtube-nocookie.com/embed/${vid}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1`;
+  let u = `https://www.youtube-nocookie.com/embed/${vid}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1`;
   if (opts.autoplay) u += '&autoplay=1';
   if (opts.muted) u += '&mute=1';
   if (st) u += `&start=${st}`;
