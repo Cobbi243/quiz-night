@@ -87,8 +87,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.23';
+const APP_VERSION = '2.24';
 const CHANGELOG = [
+  { v: '2.24', date: '01.08.2026', changes: [
+    'Відео тепер запускається напряму, без службового інтерфейсу YouTube',
+    'У гравців стартує без звуку (це дозволяють усі браузери), звук — одним дотиком',
+  ]},
   { v: '2.23', date: '01.08.2026', changes: [
     'Знайдено справжню причину: плеєр пересоздавався 4 рази на секунду і не встигав запуститись',
   ]},
@@ -1966,7 +1970,7 @@ function viewQuestion(){
             <div class="yt-block" title="Керує ведучий"></div>
             ${!r.ytPlaying ? `<div class="yt-poster-cover">🎬 Відео вмикає ведучий</div>` : ''}
           `}
-          <iframe id="yt-frame" data-vid="${esc(q.youtube.id)}"
+          <iframe id="yt-frame" data-vid="${esc(q.youtube.id)}" data-start="${q.youtube.start || ''}" data-end="${q.youtube.end || ''}"
             src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(location.origin)}${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
             title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
         </div>
@@ -3633,19 +3637,11 @@ async function handleAction(e){
       break;
     }
     case 'play-video-local': {
-      const p2 = ensureYtPlayer();
-      try {
-        if (p2 && p2.playVideo) {
-          if (p2.unMute) p2.unMute();
-          if (p2.setVolume) p2.setVolume(100);
-          p2.playVideo();
-        }
-      } catch(_){}
-      // uploaded video files too
+      const fr = document.getElementById('yt-frame');
+      if (fr) fr.src = ytEmbedUrl(fr, { autoplay: true, muted: false });
       const vv = document.getElementById('q-video');
-      if (vv) { try { vv.muted = false; vv.play(); } catch(_){} }
+      if (vv) { try { vv.muted = false; vv.currentTime = 0; vv.play(); } catch(_){} }
       state.ytBlocked = false;
-      render(true);
       break;
     }
     case 'play-video-all': await playVideoForAll(); break;
@@ -4308,7 +4304,7 @@ function syncVideoPlayback(){
     state.ytPending = true;
   }
 
-  // Uploaded video file (not YouTube) — same play/stop requests apply
+  // Uploaded video file
   const vEl = document.getElementById('q-video');
   if (vEl) {
     if (wantStop) { try { vEl.pause(); } catch (_) {} }
@@ -4317,37 +4313,41 @@ function syncVideoPlayback(){
       try {
         vEl.currentTime = 0;
         const pr = vEl.play();
-        if (pr && pr.catch) pr.catch(() => { state.ytBlocked = true; render(true); });
+        if (pr && pr.catch) pr.catch(() => { state.ytBlocked = true; });
       } catch (_) { state.ytBlocked = true; }
     }
     return;
   }
 
-  const p = ensureYtPlayer();
-  if (!p || typeof p.playVideo !== 'function') return;  // retry next tick
+  // YouTube: rather than relying on the player API (which proved unreliable),
+  // simply reload the frame with autoplay in the URL. Muted autoplay is allowed
+  // everywhere, so this always starts.
+  const frame = document.getElementById('yt-frame');
+  if (!frame) return;
 
   if (wantStop) {
-    try { p.pauseVideo(); } catch (_) {}
+    frame.src = ytEmbedUrl(frame, { autoplay: false, muted: false });
     return;
   }
   if (state.ytPending && r.ytPlayAt && serverNow() >= r.ytPlayAt) {
     state.ytPending = false;
-    try {
-      const startAt = (state.room?.pack && state.room.currentCell)
-        ? (state.room.pack.categories?.[state.room.currentCell.ci]?.questions?.[state.room.currentCell.qi]?.youtube?.start || 0)
-        : 0;
-      if (startAt) p.seekTo(startAt, true);
-      p.playVideo();
-      // Some mobile browsers refuse unmuted autoplay — offer a manual tap
-      setTimeout(() => {
-        try {
-          if (p.getPlayerState && p.getPlayerState() !== 1 && state.room?.ytPlaying) {
-            state.ytBlocked = true; render(true);
-          }
-        } catch (_) {}
-      }, 1200);
-    } catch (_) {}
+    // Host clicked a button (gesture present) so it may play with sound;
+    // players start muted and can unmute with one tap.
+    frame.src = ytEmbedUrl(frame, { autoplay: true, muted: !state.isHost });
   }
+}
+
+// Builds the embed URL for the current frame
+function ytEmbedUrl(frame, opts){
+  const vid = frame.getAttribute('data-vid') || '';
+  const st = frame.getAttribute('data-start') || '';
+  const en = frame.getAttribute('data-end') || '';
+  let u = `https://www.youtube-nocookie.com/embed/${vid}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1`;
+  if (opts.autoplay) u += '&autoplay=1';
+  if (opts.muted) u += '&mute=1';
+  if (st) u += `&start=${st}`;
+  if (en) u += `&end=${en}`;
+  return u;
 }
 
 // ============== SYNCHRONISED AUDIO ==============
