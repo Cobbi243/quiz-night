@@ -87,8 +87,11 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.21';
+const APP_VERSION = '2.22';
 const CHANGELOG = [
+  { v: '2.22', date: '01.08.2026', changes: [
+    'Повернуто робочий спосіб відтворення відео у гравців (відкат моєї регресії)',
+  ]},
   { v: '2.21', date: '01.08.2026', changes: [
     'Терміново: відео у гравців не запускалось через заборону автозапуску в браузерах',
     'Тепер стартує без звуку, а поруч кнопка «Увімкнути звук / запустити»',
@@ -1953,20 +1956,17 @@ function viewQuestion(){
   } else {
     stageBody = `
       ${q.youtube && q.youtube.id ? `
-        ${(!state.isHost && !r.ytPlaying) ? `
-          <div class="yt-wrap"><div class="yt-poster-cover">🎬 Відео вмикає ведучий</div></div>
-        ` : `
-          <div class="yt-wrap">
-            ${state.isHost ? '' : `
-              <div class="yt-shade-top"></div>
-              <div class="yt-shade-bottom"></div>
-              <div class="yt-block" title="Керує ведучий"></div>
-            `}
-            <iframe id="yt-frame" data-vid="${esc(q.youtube.id)}"
-              src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(location.origin)}${!state.isHost ? '&autoplay=1&mute=1' : ''}${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
-              title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
-          </div>
-        `}
+        <div class="yt-wrap">
+          ${state.isHost ? '' : `
+            <div class="yt-shade-top"></div>
+            <div class="yt-shade-bottom"></div>
+            <div class="yt-block" title="Керує ведучий"></div>
+            ${!r.ytPlaying ? `<div class="yt-poster-cover">🎬 Відео вмикає ведучий</div>` : ''}
+          `}
+          <iframe id="yt-frame" data-vid="${esc(q.youtube.id)}"
+            src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(location.origin)}${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
+            title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+        </div>
         ${state.isHost ? `
           <div style="display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap;">
             <button class="btn btn-accent btn-sm" data-action="play-video-all">${icon('play',14)} Увімкнути для всіх</button>
@@ -2198,7 +2198,6 @@ function viewQuestion(){
     r.revealAnswer ? 'ans' : 'q',
     r.questionState === 'dd_bid' ? 'ddbid' : '',
     state.isHost ? 'h' : 'p',
-    state.isHost ? '' : (r.ytPlaying ? 'vplay' : 'vstop'),
   ].join('|');
 
   return `
@@ -4228,6 +4227,8 @@ async function openBuzzAfterCountdown(){
 function updateMediaStatusUI(){
   const r = state.room;
   if (!r) return;
+  const cover = document.querySelector('.yt-poster-cover');
+  if (cover) cover.style.display = r.ytPlaying ? 'none' : 'flex';
 
   document.querySelectorAll('[data-media-status]').forEach(el => {
     const kind = el.getAttribute('data-media-status');
