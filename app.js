@@ -34,7 +34,7 @@ const MAX_IMG_BYTES = 220_000; // ~220KB target after compression (higher to kee
 const BUZZ_SECONDS = 30;       // total time to buzz in (default)
 const ANSWER_SECONDS = 15;     // time to answer once buzzed (default)
 const FINAL_SECONDS = 90;      // time for players to submit final round bet+answer
-const FINAL_MIN_BID_CAP = 1000; // players with <=0 score can still bid up to this
+const FINAL_MIN_BID_CAP = 1;    // with 0 or negative score you may still stake a single point
 
 // Team presets (used when team mode is on)
 const TEAM_PRESETS = [
@@ -87,8 +87,19 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.27';
+const APP_VERSION = '2.29';
 const CHANGELOG = [
+  { v: '2.29', date: '01.08.2026', changes: [
+    'Прибрано діагностичний рядок під відео',
+    'Заглушка на відео тримається надійно — превʼю не видно',
+    'Кнопка «Увімкнути звук» стала помітною',
+    'Паки ведучого переживають перезавантаження сторінки',
+    'У фіналі під час ставок немає таймера',
+    'З нулем або мінусом у фіналі можна поставити максимум 1 бал',
+  ]},
+  { v: '2.28', date: '01.08.2026', changes: [
+    'Плеєр переведено на звичайний домен YouTube — менше обмежень вбудовування',
+  ]},
   { v: '2.27', date: '01.08.2026', changes: [
     'Виправлено помилку YouTube 153 — прибрано зайві параметри вбудовування',
   ]},
@@ -502,6 +513,7 @@ let state = {
 const LS_CODE = 'quiz:code';
 const LS_AVATAR = 'quiz:avatar';
 const LS_NAME = 'quiz:name';
+const LS_SETUP = 'quiz:setup';
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k,v) => { try { localStorage.setItem(k,v); } catch {} };
 const lsDel = k => { try { localStorage.removeItem(k); } catch {} };
@@ -1225,6 +1237,21 @@ function render(force){
 
   // While a question is on screen, only refresh the parts that change. Rewriting
   // the whole screen would restart any playing audio/video and cause a flicker.
+  // Final round: refresh only the participants list, not the whole screen
+  const liveFinal = appEl.querySelector('[data-final-key]');
+  if (liveFinal && html.indexOf('data-final-key') !== -1) {
+    const t2 = document.createElement('div');
+    t2.innerHTML = html;
+    const nextFinal = t2.querySelector('[data-final-key]');
+    if (nextFinal && nextFinal.getAttribute('data-final-key') === liveFinal.getAttribute('data-final-key')) {
+      const a = liveFinal.querySelector('[data-final-list]');
+      const b = nextFinal.querySelector('[data-final-list]');
+      if (a && b && a.innerHTML !== b.innerHTML) a.innerHTML = b.innerHTML;
+      attachListeners();
+      return;
+    }
+  }
+
   const liveScreen = appEl.querySelector('.question-screen');
   if (liveScreen && html.indexOf('class="question-screen') !== -1) {
     const tmp = document.createElement('div');
@@ -1444,6 +1471,7 @@ function viewLobby(){
 }
 
 function viewModeSelect(){
+  saveSetupToStorage();
   const r = state.room;
   const buzzOpts = [10, 20, 30, 45, 60];
   const answerOpts = [5, 10, 15, 20, 30];
@@ -1962,9 +1990,9 @@ function viewQuestion(){
   } else if (r.revealAnswer) {
     stageBody = `
       <div class="q-answer-reveal" style="width:100%;">
-        ${q.image ? `<img src="${q.image}" class="q-image" style="max-height:26vh; margin-bottom:10px;" alt="">` : ''}
+        ${q.image ? `<img src="${q.image}" class="q-image" style="max-height:280px; margin-bottom:10px;" alt="">` : ''}
         <div class="q-answer-reveal-label">ПРАВИЛЬНА ВІДПОВІДЬ</div>
-        ${q.answerImage ? `<img src="${q.answerImage}" class="q-image" style="max-height:38vh; margin-bottom:8px;" alt="">` : ''}
+        ${q.answerImage ? `<img src="${q.answerImage}" class="q-image" style="max-height:400px; margin-bottom:8px;" alt="">` : ''}
         ${q.a && q.a.trim() ? `<div class="q-answer-reveal-text">${escMultiline(q.a)}</div>` : ''}
         ${q.explanation && q.explanation.trim() ? `<div style="margin-top:10px; font-size:16px; font-weight:500; color:var(--green); opacity:0.85; white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
         ${(q.q && q.q.trim()) ? `<div style="margin-top:16px; font-size:13px; color:var(--ink-dim); white-space:pre-wrap;">Питання: ${escMultiline(q.q)}</div>` : ''}
@@ -1977,10 +2005,10 @@ function viewQuestion(){
             <div class="yt-shade-top"></div>
             <div class="yt-shade-bottom"></div>
             <div class="yt-block" title="Керує ведучий"></div>
-            ${!r.ytPlaying ? `<div class="yt-poster-cover">🎬 Відео вмикає ведучий</div>` : ''}
+            <div class="yt-poster-cover" style="${r.ytPlaying ? 'display:none;' : ''}">🎬 Відео вмикає ведучий</div>
           `}
           <iframe id="yt-frame" data-vid="${esc(q.youtube.id)}" data-start="${q.youtube.start || ''}" data-end="${q.youtube.end || ''}"
-            src="https://www.youtube-nocookie.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
+            src="https://www.youtube.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
             title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
         </div>
         ${state.isHost ? `
@@ -1989,14 +2017,13 @@ function viewQuestion(){
             <button class="btn btn-ghost btn-sm" data-action="stop-video-all">⏹ Зупинити</button>
           </div>
           <div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Запуститься одночасно на всіх пристроях</div>
-          <div id="yt-debug" style="font-family:ui-monospace,monospace; font-size:11px; color:var(--gold); background:rgba(240,180,41,0.08); border:1px solid rgba(240,180,41,0.3); border-radius:8px; padding:6px 10px; margin-top:8px; word-break:break-all;">діагностика…</div>
         ` : `
-          <div id="yt-debug" style="font-family:ui-monospace,monospace; font-size:11px; color:var(--gold); background:rgba(240,180,41,0.08); border:1px solid rgba(240,180,41,0.3); border-radius:8px; padding:6px 10px; margin-top:8px; word-break:break-all;">діагностика…</div>
           <div data-media-status="video" style="font-size:13px; color:${r.ytPlaying ? 'var(--green)' : 'var(--ink-dim)'}; margin-top:8px;">
             ${r.ytPlaying ? '▶ грає...' : '🎬 відео вмикає ведучий'}
           </div>
           ${r.ytPlaying ? `
-            <button class="btn btn-accent btn-sm" data-action="play-video-local" style="margin-top:8px;">🔊 Увімкнути звук / запустити</button>
+            <button class="btn btn-accent btn-lg btn-full" data-action="play-video-local" style="margin-top:10px;">🔊 УВІМКНУТИ ЗВУК</button>
+            <div style="font-size:12px; color:var(--ink-dim); margin-top:4px;">Відео стартує без звуку — натисни щоб почути</div>
           ` : ''}
         `}
       ` : ''}
@@ -2012,7 +2039,6 @@ function viewQuestion(){
             <button class="btn btn-ghost btn-sm" data-action="stop-video-all">⏹ Зупинити</button>
           </div>
         ` : `
-          <div id="yt-debug" style="font-family:ui-monospace,monospace; font-size:11px; color:var(--gold); background:rgba(240,180,41,0.08); border:1px solid rgba(240,180,41,0.3); border-radius:8px; padding:6px 10px; margin-top:8px; word-break:break-all;">діагностика…</div>
           <div data-media-status="video" style="font-size:13px; color:${r.ytPlaying ? 'var(--green)' : 'var(--ink-dim)'}; margin-top:8px;">
             ${r.ytPlaying ? '▶ грає...' : '🎬 відео вмикає ведучий'}
           </div>
@@ -2027,7 +2053,6 @@ function viewQuestion(){
               <button class="btn btn-ghost btn-sm" data-action="stop-audio-all">⏹ Зупинити</button>
             </div>
             <div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Запуститься одночасно на всіх пристроях</div>
-          <div id="yt-debug" style="font-family:ui-monospace,monospace; font-size:11px; color:var(--gold); background:rgba(240,180,41,0.08); border:1px solid rgba(240,180,41,0.3); border-radius:8px; padding:6px 10px; margin-top:8px; word-break:break-all;">діагностика…</div>
           ` : `
             ${state.audioBlocked ? `
               <button class="btn btn-accent btn-sm" data-action="play-audio-local">${icon('play',14)} Увімкнути звук</button>
@@ -2045,12 +2070,12 @@ function viewQuestion(){
           </div>
         </div>
       ` : ''}
-      ${q.image ? `<img src="${q.image}" class="q-image" style="max-height:42vh;" alt="">` : ''}
+      ${q.image ? `<img src="${q.image}" class="q-image" style="max-height:440px;" alt="">` : ''}
       ${q.q && q.q.trim() ? `<div class="qs-question-text ${sizeClass}">${escMultiline(q.q)}</div>` : ''}
       ${state.isHost ? `
         <div style="margin-top:16px; padding:12px; background: rgba(74,222,128,0.08); border:1px dashed rgba(74,222,128,0.3); border-radius:12px; max-width:700px;">
           <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">ВІДПОВІДЬ (ТІЛЬКИ ТИ БАЧИШ)</div>
-          ${q.answerImage ? `<img src="${q.answerImage}" style="max-height:28vh; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
+          ${q.answerImage ? `<img src="${q.answerImage}" style="max-height:300px; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
           ${q.a && q.a.trim() ? `<div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--green); white-space:pre-wrap;">${escMultiline(q.a)}</div>` : ''}
           ${q.explanation && q.explanation.trim() ? `<div style="margin-top:6px; font-size:14px; font-weight:500; color:var(--green); opacity:0.8; white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
         </div>
@@ -2472,7 +2497,7 @@ function viewFinalBid(){
 
   if (state.isHost) {
     return `
-      <div class="container slide-up" style="padding-top:24px;">
+      <div class="container slide-up" style="padding-top:24px;" data-final-key="bid-host">
         <div class="eyebrow">ФІНАЛ · ФАЗА 1 · СТАВКИ</div>
         <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-top:8px; margin-bottom:8px;">${esc(r.finalQ.category)}</h2>
         <p style="color:var(--ink-dim); margin-bottom:24px;">${teamMode ? 'Команди' : 'Гравці'} бачать тільки категорію і ставлять бали. Питання покажеться у фазі 2.</p>
@@ -2482,7 +2507,7 @@ function viewFinalBid(){
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ВІДПОВІДЬ</div>
           <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--green);">${esc(r.finalQ.a)}</div>
         </div>
-        <div class="card" style="margin-bottom:16px;">
+        <div class="card" style="margin-bottom:16px;" data-final-list>
           <div style="font-size:14px; color:var(--ink-dim); margin-bottom:12px;">
             Поставили ставку: ${allBidsSubmittedCount} з ${keys.length}
           </div>
@@ -2776,7 +2801,7 @@ function viewFinalReveal(){
       <div class="card" style="margin-top:12px;">
         <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ПИТАННЯ</div>
         <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:700; margin-bottom:12px;">${esc(r.finalQ.q)}</div>
-        ${r.finalQ.answerImage ? `<img src="${r.finalQ.answerImage}" style="max-height:45vh; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
+        ${r.finalQ.answerImage ? `<img src="${r.finalQ.answerImage}" style="max-height:470px; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
         <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ПРАВИЛЬНА ВІДПОВІДЬ</div>
         <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--green);">${esc(r.finalQ.a)}</div>
       </div>
@@ -3489,6 +3514,8 @@ async function handleAction(e){
       state.subScreen = 'finalSetup';
       state.setupErr = '';
       render(true); break;
+    case 'save-setup-now':
+      saveSetupToStorage(); break;
     case 'start-all-rounds':
       await startAllRounds();
       break;
@@ -3976,6 +4003,50 @@ function validatePack(pack){
 }
 
 // Assign a chosen pack to the round slot the host is editing, then return to mode select
+// Keeps the host's prepared packs across a page reload
+function saveSetupToStorage(){
+  try {
+    lsSet(LS_SETUP, JSON.stringify({
+      rounds: state.setupRoundsTotal,
+      packs: state.setupRoundPacks,
+      finalQ: state.setupFinalQ,
+      buzzSec: state.setupBuzzSeconds,
+      answerSec: state.setupAnswerSeconds,
+      buzzMode: state.setupBuzzMode,
+      countdownSec: state.setupCountdownSeconds,
+      antiSpam: state.setupAntiSpam,
+      teamMode: state.setupTeamMode,
+      teamCount: state.setupTeamCount,
+      dd: state.setupDailyDouble,
+      ddCount: state.setupDDCount,
+      testMode: state.setupTestMode,
+      savedAt: Date.now(),
+    }));
+  } catch (_) { /* too big for storage — packs simply won't survive a reload */ }
+}
+
+function restoreSetupFromStorage(){
+  try {
+    const raw = lsGet(LS_SETUP);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (!d || !d.savedAt || (Date.now() - d.savedAt) > 12 * 3600 * 1000) return; // stale
+    if (d.rounds) state.setupRoundsTotal = d.rounds;
+    if (d.packs) state.setupRoundPacks = d.packs;
+    if (d.finalQ) state.setupFinalQ = d.finalQ;
+    if (d.buzzSec) state.setupBuzzSeconds = d.buzzSec;
+    if (d.answerSec) state.setupAnswerSeconds = d.answerSec;
+    if (d.buzzMode) state.setupBuzzMode = d.buzzMode;
+    if (d.countdownSec) state.setupCountdownSeconds = d.countdownSec;
+    state.setupAntiSpam = !!d.antiSpam;
+    state.setupTeamMode = !!d.teamMode;
+    if (d.teamCount) state.setupTeamCount = d.teamCount;
+    state.setupDailyDouble = !!d.dd;
+    if (d.ddCount) state.setupDDCount = d.ddCount;
+    state.setupTestMode = !!d.testMode;
+  } catch (_) {}
+}
+
 async function assignPackToRound(pack){
   const problems = validatePack(pack);
   if (problems.length > 0) {
@@ -3985,6 +4056,7 @@ async function assignPackToRound(pack){
   const roundN = state.editingRound || 1;
   state.setupRoundPacks[roundN] = pack;
   state.editingRound = null;
+  saveSetupToStorage();
   state.subScreen = 'modeSelect';
   state.setupSource = null;
   state.setupFilePack = null;
@@ -4239,20 +4311,6 @@ async function openBuzzAfterCountdown(){
 function updateMediaStatusUI(){
   const r = state.room;
   if (!r) return;
-  const dbg = document.getElementById('yt-debug');
-  if (dbg) {
-    const frame = document.getElementById('yt-frame');
-    const delta = r.ytPlayAt ? Math.round((serverNow() - r.ytPlayAt) / 100) / 10 : null;
-    dbg.textContent =
-      `${state.isHost ? 'ВЕДУЧИЙ' : 'ГРАВЕЦЬ'} | playing=${r.ytPlaying ? 'так' : 'ні'}` +
-      ` | token=${r.ytToken ? String(r.ytToken).slice(0,4) : '—'}` +
-      ` | мій=${state.lastYtToken ? String(state.lastYtToken).slice(0,4) : '—'}` +
-      ` | pending=${state.ytPending ? 'так' : 'ні'}` +
-      ` | frame=${frame ? 'є' : 'НЕМА'}` +
-      ` | Δ=${delta === null ? '—' : delta + 'с'}` +
-      ` | src=${frame ? (frame.src.includes('autoplay=1') ? 'autoplay' : 'звичайний') : '—'}` +
-      (state.isHost ? ` | запис=${state.ytWrite || 'ще не тиснув'}` : '');
-  }
   const cover = document.querySelector('.yt-poster-cover');
   if (cover) cover.style.display = r.ytPlaying ? 'none' : 'flex';
 
@@ -4375,7 +4433,7 @@ function ytEmbedUrl(frame, opts){
   const vid = frame.getAttribute('data-vid') || '';
   const st = frame.getAttribute('data-start') || '';
   const en = frame.getAttribute('data-end') || '';
-  let u = `https://www.youtube-nocookie.com/embed/${vid}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1`;
+  let u = `https://www.youtube.com/embed/${vid}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1`;
   if (opts.autoplay) u += '&autoplay=1';
   if (opts.muted) u += '&mute=1';
   if (st) u += `&start=${st}`;
@@ -5591,6 +5649,7 @@ async function leave(){
   state.subScreen=null; state.setupSource=null; state.setupAiPreview=null;
   state.setupManualPack=null; state.setupFilePack=null;
   state.setupRoundPacks={}; state.setupRoundsTotal=null; state.editingRound=null;
+  try { lsDel(LS_SETUP); } catch(_){}
   state.setupFinalQ={category:'', q:'', a:''};
   state.err=''; state.setupErr='';
   state.lastRenderHash = '';
@@ -5599,6 +5658,7 @@ async function leave(){
 
 // ============== INIT ==============
 async function init(){
+  restoreSetupFromStorage();
   render(true);
   if (!FIREBASE_CONFIGURED) return;
   // Track clock skew between this device and Firebase servers, so timers work
@@ -5732,6 +5792,8 @@ function updateTimerOnly(){
     total = answerSec(r);
     const deadline = r.answerPhaseDeadline || (now + total * 1000);
     sec = Math.max(0, Math.ceil((deadline - now) / 1000));
+  } else if (r.status === 'final_bid') {
+    return;
   } else if (r.status === 'final_answer' && r.finalPhaseDeadline) {
     sec = Math.max(0, Math.ceil((r.finalPhaseDeadline - now) / 1000));
     total = FINAL_SECONDS;
