@@ -87,8 +87,13 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.29';
+const APP_VERSION = '2.30';
 const CHANGELOG = [
+  { v: '2.30', date: '02.08.2026', changes: [
+    'Прибрано прокрутку в питанні — картинка й відео вписуються у вільне місце',
+    'Базер завжди лишається на екрані, навіть при збільшеному масштабі',
+    'Виправлено превʼю відео у гравців — до запуску видно лише чорну панель',
+  ]},
   { v: '2.29', date: '01.08.2026', changes: [
     'Прибрано діагностичний рядок під відео',
     'Заглушка на відео тримається надійно — превʼю не видно',
@@ -2005,10 +2010,10 @@ function viewQuestion(){
             <div class="yt-shade-top"></div>
             <div class="yt-shade-bottom"></div>
             <div class="yt-block" title="Керує ведучий"></div>
-            <div class="yt-poster-cover" style="${r.ytPlaying ? 'display:none;' : ''}">🎬 Відео вмикає ведучий</div>
+            ${!r.ytPlaying ? `<div class="yt-poster-cover">🎬 Відео вмикає ведучий</div>` : ''}
           `}
           <iframe id="yt-frame" data-vid="${esc(q.youtube.id)}" data-start="${q.youtube.start || ''}" data-end="${q.youtube.end || ''}"
-            src="https://www.youtube.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
+            src="https://www.youtube.com/embed/${esc(q.youtube.id)}?rel=0&modestbranding=1&showinfo=0&iv_load_policy=3&playsinline=1${(!state.isHost && r.ytPlaying) ? '&autoplay=1&mute=1' : ''}${q.youtube.start ? `&start=${q.youtube.start}` : ''}${q.youtube.end ? `&end=${q.youtube.end}` : ''}"
             title="video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowfullscreen></iframe>
         </div>
         ${state.isHost ? `
@@ -2243,6 +2248,7 @@ function viewQuestion(){
     r.revealAnswer ? 'ans' : 'q',
     r.questionState === 'dd_bid' ? 'ddbid' : '',
     state.isHost ? 'h' : 'p',
+    state.isHost ? '' : (r.ytPlaying ? 'vplay' : 'vidle'),
   ].join('|');
 
   return `
@@ -4311,8 +4317,6 @@ async function openBuzzAfterCountdown(){
 function updateMediaStatusUI(){
   const r = state.room;
   if (!r) return;
-  const cover = document.querySelector('.yt-poster-cover');
-  if (cover) cover.style.display = r.ytPlaying ? 'none' : 'flex';
 
   document.querySelectorAll('[data-media-status]').forEach(el => {
     const kind = el.getAttribute('data-media-status');
@@ -4422,9 +4426,9 @@ function syncVideoPlayback(){
   }
   if (state.ytPending && r.ytPlayAt && serverNow() >= r.ytPlayAt) {
     state.ytPending = false;
-    // Host clicked a button (gesture present) so it may play with sound;
-    // players start muted and can unmute with one tap.
-    frame.src = ytEmbedUrl(frame, { autoplay: true, muted: !state.isHost });
+    // The host clicked a button, so their browser allows sound straight away.
+    // Players get an autoplaying muted frame from the render and one tap to unmute.
+    if (state.isHost) frame.src = ytEmbedUrl(frame, { autoplay: true, muted: false });
   }
 }
 

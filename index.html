@@ -297,7 +297,7 @@ html, body {
 }
 .qs-stage-body {
   flex: 1 1 auto; min-height: 0;
-  overflow-y: auto;                             /* only the question text scrolls, if ever needed */
+  overflow: hidden;                             /* never scroll — content is scaled to fit instead */
   display: flex; flex-direction: column;
   align-items: center; justify-content: flex-start;
   text-align: center;
@@ -307,9 +307,14 @@ html, body {
    overflows (which plain `justify-content:center` does). */
 .qs-body-inner {
   margin: auto 0; width: 100%;
+  min-height: 0; max-height: 100%;
   display: flex; flex-direction: column;
-  align-items: center; gap: 16px;
+  align-items: center; justify-content: center; gap: 12px;
 }
+/* Media shrinks to whatever room is left, so the buzzer always stays visible */
+.qs-body-inner .q-image,
+.qs-body-inner .yt-wrap,
+.qs-body-inner .audio-player { flex: 0 1 auto; min-height: 0; }
 /* Auto-sizing question text: scales with viewport, smaller floor so long text fits */
 .qs-question-text {
   font-family: 'Fraunces', Georgia, serif;
@@ -319,7 +324,7 @@ html, body {
 }
 /* Length-based shrink: long questions get a smaller clamp via a modifier */
 .qs-question-text.long   { font-size: clamp(18px, 2.6vw, 32px); }
-.qs-question-text.xlong  { font-size: clamp(16px, 2.1vw, 26px); line-height: 1.25; }
+.qs-question-text.xlong  { font-size: clamp(14px, 1.9vw, 24px); line-height: 1.22; }
 .qs-controls {
   flex-shrink: 0;                               /* pinned to the bottom, always visible */
   display: flex; flex-direction: column; gap: 10px;
@@ -329,7 +334,7 @@ html, body {
 .q-cat { text-transform: uppercase; letter-spacing: 0.15em; color: var(--gold); font-weight: 700; }
 .q-value { font-family: 'Fraunces', Georgia, serif; font-weight: 900; font-size: 32px; color: var(--gold); }
 .q-text { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px 0; flex-direction: column; gap: 16px; }
-.q-image { max-width: 100%; max-height: 620px; border-radius: 12px; object-fit: contain; }
+.q-image { max-width: 100%; max-height: 100%; height: auto; border-radius: 12px; object-fit: contain; }
 .q-text-inner {
   font-family: 'Fraunces', Georgia, serif;
   font-weight: 700; font-size: clamp(24px, 4vw, 44px);
@@ -724,6 +729,7 @@ html, body {
 /* YouTube question embed */
 .yt-wrap {
   width: 100%; max-width: 900px;
+  max-height: 100%;
   aspect-ratio: 16 / 9;
   border-radius: 14px; overflow: hidden;
   border: 1px solid var(--line);
@@ -850,6 +856,6 @@ html, body {
 </div>
 <div id="overlay-root"></div>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script type="module" src="app.js?v=202608012000"></script>
+<script type="module" src="app.js?v=202608020900"></script>
 </body>
 </html>
