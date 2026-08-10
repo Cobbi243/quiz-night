@@ -87,8 +87,14 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.35';
+const APP_VERSION = '2.37';
 const CHANGELOG = [
+  { v: '2.37', date: '02.08.2026', changes: [
+    'Кнопка «Немає звуку?» тепер у нижній панелі — доступна навіть на телефоні',
+  ]},
+  { v: '2.36', date: '02.08.2026', changes: [
+    'Гучність аудіопитань за замовчуванням 50% замість максимальної',
+  ]},
   { v: '2.35', date: '02.08.2026', changes: [
     'Прибрано внутрішні смуги прокрутки — сторінка гортається як звичайно',
     'Кнопка базера тепер прилипає до низу екрана і завжди видима',
@@ -472,7 +478,7 @@ let state = {
   lastAudioStopToken: null,
   audioPending: false,  // waiting for the scheduled start moment
   audioBlocked: false,  // browser refused autoplay
-  audioVolume: 1,       // player-side volume for audio questions
+  audioVolume: 0.5,     // player-side volume for audio questions (half by default)
   lastYtToken: null,
   lastYtStopToken: null,
   ytPending: false,
@@ -2094,7 +2100,7 @@ function viewQuestion(){
           `}
           <div class="vol-row">
             <span style="font-size:14px;">🔈</span>
-            <input type="range" id="q-audio-vol" class="vol-slider" min="0" max="100" value="${Math.round((state.audioVolume ?? 1) * 100)}">
+            <input type="range" id="q-audio-vol" class="vol-slider" min="0" max="100" value="${Math.round((state.audioVolume ?? 0.5) * 100)}">
             <span style="font-size:14px;">🔊</span>
           </div>
         </div>
@@ -2139,6 +2145,12 @@ function viewQuestion(){
 
   // --- CONTROLS (buzz button / host judge / countdown / etc.) ---
   let controls = '';
+
+  // Media sound is easy to miss on a phone (the player itself can be scrolled
+  // off screen), so surface the unmute action in the pinned bottom bar.
+  if (!state.isHost && (r.audioPlaying || r.ytPlaying)) {
+    controls += `<button class="btn btn-accent btn-sm btn-full" data-action="unmute-all-media">🔊 Немає звуку? Натисни</button>`;
+  }
 
   if (r.questionState === 'dd_bid') {
     const canBet = state.isHost || state.myId === r.ddPlayer;
@@ -3421,7 +3433,7 @@ function attachListeners(){
   }
   // Keep the audio element in sync with the chosen volume after re-renders
   const aEl = getGlobalAudio();
-  if (aEl) aEl.volume = (state.audioVolume ?? 1);
+  if (aEl) aEl.volume = (state.audioVolume ?? 0.5);
 
   // Video attach input
   const videoIn = document.getElementById('video-input');
@@ -3718,12 +3730,24 @@ async function handleAction(e){
     case 'stop-video-all': await stopVideoForAll(); break;
     case 'play-audio-all': await playAudioForAll(); break;
     case 'stop-audio-all': await stopAudioForAll(); break;
+    case 'unmute-all-media': {
+      const a2 = syncAudioSource();
+      if (a2) {
+        try { a2.muted = false; a2.volume = (state.audioVolume ?? 0.5); a2.play(); } catch(_){}
+      }
+      const fr2 = document.getElementById('yt-frame');
+      if (fr2) fr2.src = ytEmbedUrl(fr2, { autoplay: true, muted: false });
+      const vv2 = document.getElementById('q-video');
+      if (vv2) { try { vv2.muted = false; vv2.play(); } catch(_){} }
+      state.audioBlocked = false; state.ytBlocked = false;
+      break;
+    }
     case 'play-audio-local': {
       const a = syncAudioSource();
       if (a) {
         try {
           a.muted = false;
-          a.volume = (state.audioVolume ?? 1);
+          a.volume = (state.audioVolume ?? 0.5);
           a.currentTime = 0;
           a.play();
           state.audioBlocked = false;
@@ -4531,7 +4555,7 @@ function syncAudioSource(){
   if (el.getAttribute('data-src-key') !== key) {
     el.src = src;
     el.setAttribute('data-src-key', key);
-    el.volume = (state.audioVolume ?? 1);
+    el.volume = (state.audioVolume ?? 0.5);
   }
   return el;
 }
@@ -4589,7 +4613,7 @@ function syncAudioPlayback(){
     // playback from being requested.
     try { if (el.readyState >= 1) el.currentTime = 0; } catch (_) {}
     el.muted = false;
-    el.volume = (state.audioVolume ?? 1);
+    el.volume = (state.audioVolume ?? 0.5);
     try {
       const pr = el.play();
       if (pr && pr.catch) pr.catch(() => { state.audioBlocked = true; });
