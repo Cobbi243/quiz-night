@@ -87,8 +87,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.34';
+const APP_VERSION = '2.35';
 const CHANGELOG = [
+  { v: '2.35', date: '02.08.2026', changes: [
+    'Прибрано внутрішні смуги прокрутки — сторінка гортається як звичайно',
+    'Кнопка базера тепер прилипає до низу екрана і завжди видима',
+  ]},
   { v: '2.34', date: '02.08.2026', changes: [
     'Виправлено: підказка з відповіддю більше не налазить на текст питання',
   ]},
@@ -1296,7 +1300,6 @@ function render(force){
   appEl.innerHTML = html;
   attachListeners();
 
-  fitQuestionText();
 
   // While chat is open, mark all current messages as seen
   if (state.chatOpen && state.room && state.room.chat) {

@@ -273,18 +273,18 @@ html, body {
 /* ===== Fixed-height question screen (no page scroll; sticky controls) ===== */
 .question-screen {
   max-width: 1100px; margin: 0 auto;
-  height: calc(100vh - 24px);
-  height: calc(100dvh - 24px);
+  min-height: calc(100vh - 24px);
+  min-height: calc(100dvh - 24px);
   display: flex; flex-direction: column;
   gap: 12px;
-  padding: 12px 0;
+  padding: 12px 0 0;
 }
 .qs-topbar {
   flex-shrink: 0;
   display: flex; justify-content: space-between; align-items: center;
 }
 .qs-stage {
-  flex: 1 1 auto; min-height: 0;               /* allow shrink so it never pushes controls off */
+  flex: 1 1 auto;
   background: var(--stage); border-radius: 24px;
   box-shadow: 0 24px 48px rgba(0,0,0,0.4);
   display: flex; flex-direction: column;
@@ -297,7 +297,7 @@ html, body {
 }
 .qs-stage-body {
   flex: 1 1 auto; min-height: 0;
-  overflow: hidden;                             /* never scroll — content is scaled to fit instead */
+  overflow: visible;                            /* the page scrolls instead of an inner scrollbar */
   display: flex; flex-direction: column;
   align-items: center; justify-content: flex-start;
   text-align: center;
@@ -307,7 +307,6 @@ html, body {
    overflows (which plain `justify-content:center` does). */
 .qs-body-inner {
   margin: auto 0; width: 100%;
-  min-height: 0; max-height: 100%;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 12px;
 }
@@ -322,7 +321,6 @@ html, body {
   background: rgba(74,222,128,0.08);
   border: 1px dashed rgba(74,222,128,0.3);
   border-radius: 12px;
-  overflow-y: auto; max-height: 42%;
 }
 .qs-body-inner .qs-question-text { flex: 0 1 auto; min-height: 0; }
 /* Auto-sizing question text: scales with viewport, smaller floor so long text fits */
@@ -336,15 +334,18 @@ html, body {
 .qs-question-text.long   { font-size: clamp(18px, 2.6vw, 32px); }
 .qs-question-text.xlong  { font-size: clamp(14px, 1.9vw, 24px); line-height: 1.22; }
 .qs-controls {
-  flex-shrink: 0;                               /* pinned to the bottom, always visible */
+  position: sticky; bottom: 0; z-index: 20;
+  flex-shrink: 0;
   display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 0 14px;
+  background: linear-gradient(to bottom, rgba(15,14,23,0) 0%, var(--bg) 22%, var(--bg) 100%);
 }
 
 .q-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; font-size: 14px; }
 .q-cat { text-transform: uppercase; letter-spacing: 0.15em; color: var(--gold); font-weight: 700; }
 .q-value { font-family: 'Fraunces', Georgia, serif; font-weight: 900; font-size: 32px; color: var(--gold); }
 .q-text { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px 0; flex-direction: column; gap: 16px; }
-.q-image { max-width: 100%; max-height: 100%; height: auto; border-radius: 12px; object-fit: contain; }
+.q-image { max-width: 100%; max-height: 60vh; height: auto; border-radius: 12px; object-fit: contain; }
 .q-text-inner {
   font-family: 'Fraunces', Georgia, serif;
   font-weight: 700; font-size: clamp(24px, 4vw, 44px);
@@ -739,7 +740,6 @@ html, body {
 /* YouTube question embed */
 .yt-wrap {
   width: 100%; max-width: 900px;
-  max-height: 100%;
   aspect-ratio: 16 / 9;
   border-radius: 14px; overflow: hidden;
   border: 1px solid var(--line);
@@ -866,6 +866,6 @@ html, body {
 </div>
 <div id="overlay-root"></div>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script type="module" src="app.js?v=202608021130"></script>
+<script type="module" src="app.js?v=202608021200"></script>
 </body>
 </html>
