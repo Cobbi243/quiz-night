@@ -87,8 +87,11 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.32';
+const APP_VERSION = '2.33';
 const CHANGELOG = [
+  { v: '2.33', date: '02.08.2026', changes: [
+    'Виправлено аудіо в Chrome: перемотування до старту зривало запуск',
+  ]},
   { v: '2.32', date: '02.08.2026', changes: [
     'Кнопка «Увімкнути звук» тепер є і для завантажених відео, не лише для YouTube',
     'Кнопка звуку для аудіо показується завжди — Chrome блокує автозапуск',
@@ -4575,15 +4578,17 @@ function syncAudioPlayback(){
 
   if (state.audioPending && r.audioPlayAt && serverNow() >= r.audioPlayAt) {
     state.audioPending = false;
+    // Rewinding before the file has any data throws in Chrome, which previously
+    // aborted the whole attempt. Seek only when it's safe, and never let it stop
+    // playback from being requested.
+    try { if (el.readyState >= 1) el.currentTime = 0; } catch (_) {}
+    el.muted = false;
+    el.volume = (state.audioVolume ?? 1);
     try {
-      el.currentTime = 0;
       const pr = el.play();
-      if (pr && pr.catch) {
-        pr.catch(() => { state.audioBlocked = true; render(true); });
-      }
+      if (pr && pr.catch) pr.catch(() => { state.audioBlocked = true; });
     } catch (_) {
       state.audioBlocked = true;
-      render(true);
     }
   }
 }
