@@ -87,8 +87,11 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.33';
+const APP_VERSION = '2.34';
 const CHANGELOG = [
+  { v: '2.34', date: '02.08.2026', changes: [
+    'Виправлено: підказка з відповіддю більше не налазить на текст питання',
+  ]},
   { v: '2.33', date: '02.08.2026', changes: [
     'Виправлено аудіо в Chrome: перемотування до старту зривало запуск',
   ]},
@@ -2096,7 +2099,7 @@ function viewQuestion(){
       ${q.image ? `<img src="${q.image}" class="q-image" style="max-height:440px;" alt="">` : ''}
       ${q.q && q.q.trim() ? `<div class="qs-question-text ${sizeClass}">${escMultiline(q.q)}</div>` : ''}
       ${state.isHost ? `
-        <div style="margin-top:16px; padding:12px; background: rgba(74,222,128,0.08); border:1px dashed rgba(74,222,128,0.3); border-radius:12px; max-width:700px;">
+        <div class="host-answer-box">
           <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">ВІДПОВІДЬ (ТІЛЬКИ ТИ БАЧИШ)</div>
           ${q.answerImage ? `<img src="${q.answerImage}" style="max-height:300px; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
           ${q.a && q.a.trim() ? `<div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--green); white-space:pre-wrap;">${escMultiline(q.a)}</div>` : ''}
