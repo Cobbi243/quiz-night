@@ -313,8 +313,9 @@ html, body {
 }
 /* Media shrinks to whatever room is left, so the buzzer always stays visible */
 .qs-body-inner .q-image,
-.qs-body-inner .yt-wrap,
-.qs-body-inner .audio-player { flex: 0 1 auto; min-height: 0; }
+.qs-body-inner .yt-wrap { flex: 0 1 auto; min-height: 0; }
+.qs-body-inner .audio-player { flex: 0 0 auto; }
+.qs-body-inner .qs-question-text { flex: 0 1 auto; min-height: 0; }
 /* Auto-sizing question text: scales with viewport, smaller floor so long text fits */
 .qs-question-text {
   font-family: 'Fraunces', Georgia, serif;
@@ -856,6 +857,6 @@ html, body {
 </div>
 <div id="overlay-root"></div>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script type="module" src="app.js?v=202608020900"></script>
+<script type="module" src="app.js?v=202608020940"></script>
 </body>
 </html>

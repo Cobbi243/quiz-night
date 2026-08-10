@@ -87,8 +87,14 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.30';
+const APP_VERSION = '2.31';
 const CHANGELOG = [
+  { v: '2.31', date: '02.08.2026', changes: [
+    'Виправлено: довге питання тепер вміщається на будь-якому екрані',
+    'Виправлено: пробіл більше не прокручує сторінку вниз',
+    'Виправлено: аудіо у гравців знову відтворюється',
+    'Виправлено: плеєр більше не перекривається текстом питання',
+  ]},
   { v: '2.30', date: '02.08.2026', changes: [
     'Прибрано прокрутку в питанні — картинка й відео вписуються у вільне місце',
     'Базер завжди лишається на екрані, навіть при збільшеному масштабі',
@@ -1279,6 +1285,8 @@ function render(force){
 
   appEl.innerHTML = html;
   attachListeners();
+
+  fitQuestionText();
 
   // While chat is open, mark all current messages as seen
   if (state.chatOpen && state.room && state.room.chat) {
@@ -4314,6 +4322,22 @@ async function openBuzzAfterCountdown(){
 
 // Keeps the "video cover" and the play-status labels current without touching
 // the media elements (re-rendering those would restart playback).
+// Scales the question text down until it fits the stage, so nothing is cut off
+// on big screens and no scrollbar is needed on small ones.
+function fitQuestionText(){
+  const box = document.querySelector('.qs-stage-body');
+  const el = document.querySelector('.qs-question-text');
+  if (!box || !el) return;
+  el.style.fontSize = '';
+  const inner = box.querySelector('.qs-body-inner') || box;
+  let size = parseFloat(getComputedStyle(el).fontSize) || 24;
+  let guard = 40;
+  while (inner.scrollHeight > box.clientHeight && size > 12 && guard-- > 0) {
+    size -= Math.max(1, size * 0.06);
+    el.style.fontSize = size + 'px';
+  }
+}
+
 function updateMediaStatusUI(){
   const r = state.room;
   if (!r) return;
@@ -4535,8 +4559,6 @@ function syncAudioPlayback(){
   }
 
   if (state.audioPending && r.audioPlayAt && serverNow() >= r.audioPlayAt) {
-    // Wait until the file has enough data, otherwise play() can silently fail
-    if (el.readyState < 2) { try { el.load(); } catch (_) {} return; }
     state.audioPending = false;
     try {
       el.currentTime = 0;
