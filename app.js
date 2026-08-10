@@ -87,8 +87,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.31';
+const APP_VERSION = '2.32';
 const CHANGELOG = [
+  { v: '2.32', date: '02.08.2026', changes: [
+    'Кнопка «Увімкнути звук» тепер є і для завантажених відео, не лише для YouTube',
+    'Кнопка звуку для аудіо показується завжди — Chrome блокує автозапуск',
+  ]},
   { v: '2.31', date: '02.08.2026', changes: [
     'Виправлено: довге питання тепер вміщається на будь-якому екрані',
     'Виправлено: пробіл більше не прокручує сторінку вниз',
@@ -2055,6 +2059,10 @@ function viewQuestion(){
           <div data-media-status="video" style="font-size:13px; color:${r.ytPlaying ? 'var(--green)' : 'var(--ink-dim)'}; margin-top:8px;">
             ${r.ytPlaying ? '▶ грає...' : '🎬 відео вмикає ведучий'}
           </div>
+          ${r.ytPlaying ? `
+            <button class="btn btn-accent btn-lg btn-full" data-action="play-video-local" style="margin-top:10px;">🔊 УВІМКНУТИ ЗВУК</button>
+            <div style="font-size:12px; color:var(--ink-dim); margin-top:4px;">Відео стартує без звуку — натисни щоб почути</div>
+          ` : ''}
         `}
       ` : ''}
       ${q.audio ? `
@@ -2067,14 +2075,13 @@ function viewQuestion(){
             </div>
             <div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Запуститься одночасно на всіх пристроях</div>
           ` : `
-            ${state.audioBlocked ? `
-              <button class="btn btn-accent btn-sm" data-action="play-audio-local">${icon('play',14)} Увімкнути звук</button>
-              <div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Браузер заблокував автозапуск — натисни щоб почути</div>
-            ` : `
-              <div data-media-status="audio" style="font-size:14px; color:${r.audioPlaying ? 'var(--green)' : 'var(--ink-dim)'};">
-                ${r.audioPlaying ? '▶ грає...' : '⏳ чекаємо на ведучого'}
-              </div>
-            `}
+            <div data-media-status="audio" style="font-size:14px; color:${r.audioPlaying ? 'var(--green)' : 'var(--ink-dim)'};">
+              ${r.audioPlaying ? '▶ грає...' : '⏳ чекаємо на ведучого'}
+            </div>
+            ${r.audioPlaying ? `
+              <button class="btn btn-accent btn-lg btn-full" data-action="play-audio-local" style="margin-top:10px;">🔊 УВІМКНУТИ ЗВУК</button>
+              <div style="font-size:12px; color:var(--ink-dim); margin-top:4px;">Chrome блокує автозапуск — натисни щоб почути</div>
+            ` : ''}
           `}
           <div class="vol-row">
             <span style="font-size:14px;">🔈</span>
@@ -3704,7 +3711,15 @@ async function handleAction(e){
     case 'stop-audio-all': await stopAudioForAll(); break;
     case 'play-audio-local': {
       const a = syncAudioSource();
-      if (a) { try { a.play(); state.audioBlocked = false; render(true); } catch(_){} }
+      if (a) {
+        try {
+          a.muted = false;
+          a.volume = (state.audioVolume ?? 1);
+          a.currentTime = 0;
+          a.play();
+          state.audioBlocked = false;
+        } catch(_){}
+      }
       break;
     }
     case 'attach-video': {
