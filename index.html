@@ -787,6 +787,23 @@ html, body {
   backdrop-filter: blur(8px); pointer-events: none;
 }
 
+/* Stat tiles — numbers scale down instead of spilling out of the card */
+.stat-tile {
+  text-align: center; padding: 14px 6px;
+  min-width: 0; overflow: hidden;
+}
+.stat-value {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 900; line-height: 1.05;
+  font-size: clamp(15px, 4.2vw, 28px);
+  overflow-wrap: anywhere;
+}
+.stat-label {
+  font-size: 10px; color: var(--ink-dim);
+  margin-top: 3px; letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+}
+
 /* Uploaded avatar pictures */
 .avatar-img {
   width: 1.15em; height: 1.15em;
@@ -866,6 +883,6 @@ html, body {
 </div>
 <div id="overlay-root"></div>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script type="module" src="app.js?v=202608021300"></script>
+<script type="module" src="app.js?v=202608091200"></script>
 </body>
 </html>

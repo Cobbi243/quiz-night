@@ -87,8 +87,13 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.37';
+const APP_VERSION = '2.38';
 const CHANGELOG = [
+  { v: '2.38', date: '09.08.2026', changes: [
+    'Цифри в статистиці більше не вилазять за рамки, особливо на телефоні',
+    'Базер спрацьовує з першого дотику на iPhone',
+    'Ведучий може виправити ставку гравця у фіналі',
+  ]},
   { v: '2.37', date: '02.08.2026', changes: [
     'Кнопка «Немає звуку?» тепер у нижній панелі — доступна навіть на телефоні',
   ]},
@@ -470,6 +475,8 @@ let state = {
   myHostProfile: null,  // cached host stats
   showStats: false,     // stats screen open
   showRanking: false,   // ranking table open
+  editingBidKey: null,  // whose final bid the host is correcting
+  editBidValue: null,
   leaderboard: [],      // cached ranking rows
   audioTarget: null,    // {ci,qi} awaiting an audio file
   videoTarget: null,    // {ci,qi} awaiting a video file
@@ -1254,6 +1261,7 @@ function render(force){
   let overlay = '';
   if (state.showFormatHelp) overlay += viewFormatHelpModal();
   if (state.showChangelog) overlay += viewChangelogModal();
+  if (state.editingBidKey && state.isHost) overlay += viewFinalBidEditModal();
   overlay += `<button class="version-badge" data-action="show-changelog" title="Що нового">v${APP_VERSION}</button>`;
   if (state.room && state.room.testModeConfig) {
     overlay += `<div class="test-badge" title="Результати не зберігаються">🧪 ТЕСТОВА ГРА</div>`;
@@ -2563,7 +2571,10 @@ function viewFinalBid(){
                 <div ${teamMode ? `style="color:${info.color}; font-weight:700;"` : ''}>${esc(info.name)}</div>
                 ${teamMode ? `<div style="font-size:11px; color:var(--ink-faint);">${info.members.map(m => m.avatar).join(' ')}</div>` : ''}
               </div>
-              <div style="color:${done?'var(--green)':'var(--ink-dim)'}; font-size:13px;">${done ? `✓ ${sub.bid}` : '⌛ Очікуємо'}</div>
+              <div style="color:${done?'var(--green)':'var(--ink-dim)'}; font-size:13px; display:flex; align-items:center; gap:8px;">
+                ${done ? `✓ ${sub.bid}` : '⌛ Очікуємо'}
+                ${done ? `<button class="btn btn-ghost btn-sm" data-action="edit-final-bid" data-key="${k}" style="padding:2px 8px; font-size:11px;">✏ змінити</button>` : ''}
+              </div>
             </div>`;
           }).join('')}
         </div>
@@ -2954,9 +2965,9 @@ function viewStats(){
     ? Math.round((prof.correct / (prof.correct + prof.wrong)) * 100) : 0;
 
   const stat = (label, value, accent) => `
-    <div class="card" style="text-align:center; padding:16px 8px;">
-      <div style="font-family:'Fraunces',serif; font-weight:900; font-size:28px; color:${accent || 'var(--gold)'};">${value}</div>
-      <div style="font-size:11px; color:var(--ink-dim); margin-top:2px; letter-spacing:0.05em;">${label}</div>
+    <div class="card stat-tile">
+      <div class="stat-value" style="color:${accent || 'var(--gold)'};">${value}</div>
+      <div class="stat-label">${label}</div>
     </div>`;
 
   return `
@@ -3057,6 +3068,31 @@ function viewStats(){
 
       <div class="info-text" style="margin-top:16px;">
         💡 Статистика зберігається для цього браузера. З іншого пристрою буде окрема.
+      </div>
+    </div>
+  `;
+}
+
+// Lets the host correct a bid a player entered by mistake
+function viewFinalBidEditModal(){
+  const r = state.room;
+  const k = state.editingBidKey;
+  if (!r || !k) return '';
+  const info = finalEntityInfo(r, k);
+  const sub = (r.finalBids || {})[k] || {};
+  const max = Math.max(FINAL_MIN_BID_CAP, finalEntityScore(r, k));
+  const cur = (typeof sub.bid === 'number') ? sub.bid : 0;
+  return `
+    <div class="modal-backdrop" data-action="close-final-bid-edit">
+      <div class="modal" data-stop="1">
+        <div class="modal-title">Змінити ставку</div>
+        <div class="modal-subtitle">${av(info.avatar)} ${esc(info.name)} · максимум ${max}</div>
+        <input type="number" class="input" id="edit-bid-input" min="0" max="${max}" value="${cur}"
+          style="font-family:'Fraunces',serif; font-size:24px; font-weight:700; color:var(--gold); margin-top:16px;">
+        <div class="modal-actions" style="flex-direction:column; gap:8px;">
+          <button class="btn btn-gold btn-full" data-action="save-final-bid-edit">${icon('check',16)} Зберегти</button>
+          <button class="btn btn-ghost btn-full" data-action="close-final-bid-edit">Скасувати</button>
+        </div>
       </div>
     </div>
   `;
@@ -3263,6 +3299,21 @@ function viewScoreEditModal(){
 function attachListeners(){
   document.querySelectorAll('[data-action]').forEach(el => {
     el.addEventListener('click', handleAction);
+  });
+  // The buzzer must react to the very first touch. On iOS the first tap can be
+  // swallowed as a hover event, so respond to pointerdown instead of click.
+  document.querySelectorAll('.buzz-btn[data-action="buzz"], .buzz-btn[data-action="dd-buzz"]').forEach(el => {
+    if (el._fastBound) return;
+    el._fastBound = true;
+    el.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      el._firedFast = true;
+      handleAction(ev);
+      setTimeout(() => { el._firedFast = false; }, 400);
+    }, { passive: false });
+    el.addEventListener('click', (ev) => {
+      if (el._firedFast) { ev.preventDefault(); ev.stopImmediatePropagation(); }
+    }, true);
   });
   // Track join/host inputs so state persists across re-renders
   const joinCode = document.getElementById('join-code');
@@ -3790,6 +3841,27 @@ async function handleAction(e){
       state.myProfile = await loadMyProfile();
       state.myHostProfile = await loadMyHostProfile();
       render(true); break;
+    case 'edit-final-bid':
+      state.editingBidKey = el.dataset.key;
+      state.editBidValue = null;
+      render(true); break;
+    case 'close-final-bid-edit':
+      if (el.dataset.action === 'close-final-bid-edit') {
+        state.editingBidKey = null; state.editBidValue = null; render(true);
+      }
+      break;
+    case 'save-final-bid-edit': {
+      e.stopPropagation();
+      const k2 = state.editingBidKey;
+      if (!k2) break;
+      const inp2 = document.getElementById('edit-bid-input');
+      const v2 = inp2 ? parseInt(inp2.value, 10) : NaN;
+      const max2 = Math.max(FINAL_MIN_BID_CAP, finalEntityScore(state.room, k2));
+      if (!Number.isFinite(v2) || v2 < 0 || v2 > max2) break;
+      await update(ref(db, `rooms/${state.code}/finalBids/${k2}`), { bid: v2, bidSubmitted: true });
+      state.editingBidKey = null; state.editBidValue = null;
+      render(true); break;
+    }
     case 'open-ranking':
       state.showRanking = true;
       state.leaderboard = await loadLeaderboard();
