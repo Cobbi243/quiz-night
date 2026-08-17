@@ -87,8 +87,11 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.38';
+const APP_VERSION = '2.39';
 const CHANGELOG = [
+  { v: '2.39', date: '09.08.2026', changes: [
+    'У фіналі зʼявились швидкі ставки: 0, ¼, ½ і «ВСЕ» — не треба вписувати вручну',
+  ]},
   { v: '2.38', date: '09.08.2026', changes: [
     'Цифри в статистиці більше не вилазять за рамки, особливо на телефоні',
     'Базер спрацьовує з першого дотику на iPhone',
@@ -2624,6 +2627,12 @@ function viewFinalBid(){
           <div style="font-family:'Fraunces',serif; font-size:36px; font-weight:900; color:var(--gold); margin-bottom:16px;">${curScore}</div>
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">СКІЛЬКИ СТАВИШ (0 — ${myScore})</div>
           <input type="number" class="input" id="final-bid" min="0" max="${myScore}" value="${bid}" style="font-family:'Fraunces',serif; font-size:24px; font-weight:700; color:var(--accent);">
+          <div class="bid-quick-row">
+            <button class="btn btn-ghost btn-sm" data-action="quick-bid" data-bid="0">0</button>
+            <button class="btn btn-ghost btn-sm" data-action="quick-bid" data-bid="${Math.floor(myScore/4)}">¼</button>
+            <button class="btn btn-ghost btn-sm" data-action="quick-bid" data-bid="${Math.floor(myScore/2)}">½</button>
+            <button class="btn btn-accent btn-sm" data-action="quick-bid" data-bid="${myScore}">🔥 ВСЕ (${myScore})</button>
+          </div>
           ${curScore < FINAL_MIN_BID_CAP ? `<div style="font-size:12px; color:var(--ink-dim); margin-top:6px;">Балів мало, тож можна поставити до ${FINAL_MIN_BID_CAP} — є шанс відігратись 🎯</div>` : ''}
           ${teamMode ? `<div style="font-size:12px; color:var(--ink-faint); margin-top:6px;">Це ставка за всю команду — домовтесь між собою</div>` : ''}
         </div>
@@ -3721,6 +3730,16 @@ async function handleAction(e){
       render(true); break;
     }
     case 'start-final': await startFinalRound(); break;
+    case 'quick-bid': {
+      e.stopPropagation();
+      const v = parseInt(el.dataset.bid, 10);
+      if (!Number.isFinite(v)) break;
+      state.finalBidLocal = v;
+      const fbi = document.getElementById('final-bid');
+      if (fbi) fbi.value = String(v);
+      updateFinalSubmitButton();
+      break;
+    }
     case 'submit-final-bid': await submitFinalBid(); break;
     case 'submit-final-answer': await submitFinalAnswer(); break;
     case 'start-final-answer-phase': await startFinalAnswerPhase(); break;

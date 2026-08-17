@@ -787,6 +787,12 @@ html, body {
   backdrop-filter: blur(8px); pointer-events: none;
 }
 
+/* Quick bet buttons in the final round */
+.bid-quick-row {
+  display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;
+}
+.bid-quick-row .btn { flex: 1 1 auto; min-width: 56px; }
+
 /* Stat tiles — numbers scale down instead of spilling out of the card */
 .stat-tile {
   text-align: center; padding: 14px 6px;
@@ -883,6 +889,6 @@ html, body {
 </div>
 <div id="overlay-root"></div>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script type="module" src="app.js?v=202608091200"></script>
+<script type="module" src="app.js?v=202608091300"></script>
 </body>
 </html>
