@@ -89,8 +89,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.40';
+const APP_VERSION = '2.41';
 const CHANGELOG = [
+  { v: '2.41', date: '09.08.2026', changes: [
+    'НОВЕ: обʼєднання статистики з різних пристроїв за кодом',
+    'Створюєш код на одному пристрої, вводиш на іншому — прогрес складається разом',
+  ]},
   { v: '2.40', date: '09.08.2026', changes: [
     'Виправлено збереження зміненої ставки у фіналі (тепер показує причину, якщо не вийшло)',
     'Виправлено «Команда NaN» — гравця могли помилково прийняти за команду',
@@ -485,6 +489,9 @@ let state = {
   myHostProfile: null,  // cached host stats
   showStats: false,     // stats screen open
   showRanking: false,   // ranking table open
+  mergeCode: null,      // code generated on this device
+  mergeInput: '',       // code typed from another device
+  mergeMsg: '',
   editingBidKey: null,  // whose final bid the host is correcting
   editBidValue: null,
   leaderboard: [],      // cached ranking rows
@@ -1162,6 +1169,8 @@ function computeHash(){
     showChangelog: state.showChangelog,
     showStats: state.showStats,
     showRanking: state.showRanking,
+    mergeCode: state.mergeCode,
+    mergeMsg: state.mergeMsg,
     rankingCount: (state.leaderboard||[]).length,
     newAchievements: (state.newAchievements||[]).join(','),
     profileGames: state.myProfile?.games || 0,
@@ -3078,7 +3087,32 @@ function viewStats(){
         </div>
       ` : ''}
 
-      <button class="btn btn-ghost btn-full" data-action="open-ranking" style="margin-top:24px;">
+      <div class="card" style="margin-top:24px;">
+        <div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; margin-bottom:6px;">🔗 Обʼєднати статистику</div>
+        <div style="font-size:13px; color:var(--ink-dim); line-height:1.5; margin-bottom:12px;">
+          Грав з іншого пристрою чи браузера? Створи код тут, потім введи його на другому пристрої — статистика складеться разом.
+        </div>
+
+        ${state.mergeCode ? `
+          <div style="background:var(--soft); border-radius:10px; padding:12px; text-align:center; margin-bottom:12px;">
+            <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.1em;">ТВІЙ КОД</div>
+            <div style="font-family:'Fraunces',serif; font-weight:900; font-size:30px; color:var(--gold); letter-spacing:0.1em;">${esc(state.mergeCode)}</div>
+            <div style="font-size:12px; color:var(--ink-dim); margin-top:4px;">Введи його на іншому пристрої</div>
+          </div>
+        ` : `
+          <button class="btn btn-ghost btn-full" data-action="create-merge-code" style="margin-bottom:12px;">
+            ${icon('plus',16)} Створити код на цьому пристрої
+          </button>
+        `}
+
+        <input class="input" id="merge-input" placeholder="Або введи код з іншого пристрою" value="${esc(state.mergeInput || '')}" autocomplete="off" style="text-transform:uppercase;">
+        <button class="btn btn-gold btn-full" data-action="apply-merge-code" style="margin-top:8px;">
+          ${icon('check',16)} Обʼєднати
+        </button>
+        ${state.mergeMsg ? `<div style="font-size:13px; margin-top:10px; color:${state.mergeMsg.startsWith('✓') ? 'var(--green)' : 'var(--accent)'};">${esc(state.mergeMsg)}</div>` : ''}
+      </div>
+
+      <button class="btn btn-ghost btn-full" data-action="open-ranking" style="margin-top:16px;">
         ${icon('crown',16)} Загальний рейтинг гравців
       </button>
 
@@ -3113,6 +3147,99 @@ function viewFinalBidEditModal(){
       </div>
     </div>
   `;
+}
+
+// ============== MERGING PROFILES ACROSS DEVICES ==============
+// A player who used two browsers ends up with two separate profiles. They can
+// generate a code on one device and enter it on the other to combine them.
+
+async function createMergeCode(){
+  if (!state.myId || !db) return;
+  const prof = await loadMyProfile();
+  if (!prof) { state.mergeMsg = 'Тут ще немає статистики — нічого переносити.'; render(true); return; }
+  const code = genCode() + genCode();          // 8 characters
+  try {
+    await set(ref(db, `mergeCodes/${code}`), {
+      uid: state.myId,
+      name: prof.name || 'Гравець',
+      createdAt: Date.now(),
+    });
+    // The other device cannot read our private profile, so publish a copy that
+    // the code grants access to.
+    await set(ref(db, `mergeData/${code}`), prof);
+    state.mergeCode = code;
+    state.mergeMsg = '';
+  } catch (e) {
+    state.mergeMsg = 'Не вдалося створити код: ' + (e.message || e);
+  }
+  render(true);
+}
+
+// Adds up two profiles. Counters sum, records take the best, achievements merge.
+function mergeProfiles(a, b){
+  const out = { ...(a || {}) };
+  const sum = (k) => (a?.[k] || 0) + (b?.[k] || 0);
+  ['games','wins','totalScore','correct','wrong','buzzes','ddWins','finalWins',
+   'audioCorrect','mediaCorrect','finalsPlayed',
+   'sumR1','cntR1','sumR2','cntR2','sumR3','cntR3'].forEach(k => { out[k] = sum(k); });
+  out.bestScore = Math.max(a?.bestScore || 0, b?.bestScore || 0);
+  const worsts = [a?.worstScore, b?.worstScore].filter(v => typeof v === 'number');
+  out.worstScore = worsts.length ? Math.min(...worsts) : null;
+  out.streak = Math.max(a?.streak || 0, b?.streak || 0);
+  out.achievements = { ...(b?.achievements || {}), ...(a?.achievements || {}) };
+  out.name = a?.name || b?.name || 'Гравець';
+  out.avatar = a?.avatar || b?.avatar || '👤';
+  out.lastPlayedAt = Math.max(a?.lastPlayedAt || 0, b?.lastPlayedAt || 0) || Date.now();
+  return out;
+}
+
+async function applyMergeCode(){
+  const code = (state.mergeInput || '').trim().toUpperCase();
+  if (!code) return;
+  if (!state.myId) return;
+  state.mergeMsg = 'Обʼєднуємо…';
+  render(true);
+  try {
+    const snap = await get(ref(db, `mergeCodes/${code}`));
+    if (!snap.exists()) { state.mergeMsg = 'Такого коду немає або він уже використаний.'; render(true); return; }
+    const other = snap.val();
+    if (!other.uid || other.uid === state.myId) {
+      state.mergeMsg = 'Це той самий пристрій — обʼєднувати нічого.';
+      render(true); return;
+    }
+
+    // Read both profiles, combine, write the result here
+    const mineSnap = await get(ref(db, `users/${state.myId}/profile`));
+    const mine = mineSnap.exists() ? mineSnap.val() : null;
+    const theirsSnap = await get(ref(db, `mergeData/${code}`));
+    const theirs = theirsSnap.exists() ? theirsSnap.val() : null;
+    if (!theirs) {
+      state.mergeMsg = 'Дані з того пристрою ще не готові. Онови код на першому пристрої.';
+      render(true); return;
+    }
+
+    const merged = mergeProfiles(mine, theirs);
+    await set(ref(db, `users/${state.myId}/profile`), merged);
+    await set(ref(db, `leaderboard/${state.myId}`), {
+      name: merged.name, avatar: merged.avatar,
+      games: merged.games || 0, wins: merged.wins || 0,
+      bestScore: merged.bestScore || 0,
+      correct: merged.correct || 0, wrong: merged.wrong || 0,
+      achievements: Object.keys(merged.achievements || {}).length,
+      updatedAt: Date.now(),
+    });
+    // Retire the old public card and the code
+    try { await set(ref(db, `leaderboard/${other.uid}`), null); } catch (_) {}
+    try { await set(ref(db, `mergeCodes/${code}`), null); } catch (_) {}
+    try { await set(ref(db, `mergeData/${code}`), null); } catch (_) {}
+
+    state.myProfile = merged;
+    state.mergeInput = '';
+    state.mergeMsg = '✓ Готово! Статистику обʼєднано.';
+  } catch (e) {
+    state.mergeMsg = 'Помилка: ' + (e.message || e);
+  }
+  render(true);
 }
 
 // ============== RANKING TABLE ==============
@@ -3554,6 +3681,9 @@ function attachListeners(){
     ddInp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitDDBid(); } });
   }
 
+  const mergeInp = document.getElementById('merge-input');
+  if (mergeInp) mergeInp.addEventListener('input', e => { state.mergeInput = e.target.value; });
+
   // Chat input
   const chatInput = document.getElementById('chat-input');
   if (chatInput) {
@@ -3906,6 +4036,8 @@ async function handleAction(e){
       }
       break;
     }
+    case 'create-merge-code': await createMergeCode(); break;
+    case 'apply-merge-code': await applyMergeCode(); break;
     case 'open-ranking':
       state.showRanking = true;
       state.leaderboard = await loadLeaderboard();
