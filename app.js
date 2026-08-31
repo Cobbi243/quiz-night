@@ -43,6 +43,8 @@ const TEAM_PRESETS = [
   { id: 3, name: 'Зелені',   color: '#4ade80', emoji: '🟢' },
   { id: 4, name: 'Жовті',    color: '#f0b429', emoji: '🟡' },
 ];
+function isTeamKey(key){ return typeof key === 'string' && /^t\d+$/.test(key); }
+
 function teamsOf(r){
   const n = (r && r.teamCountConfig) || 0;
   return TEAM_PRESETS.slice(0, n);
@@ -66,12 +68,12 @@ function myFinalKey(r){
 }
 // Current score for a final entity key
 function finalEntityScore(r, key){
-  if (typeof key === 'string' && key.startsWith('t')) return teamScore(r, parseInt(key.slice(1), 10));
+  if (isTeamKey(key)) return teamScore(r, parseInt(key.slice(1), 10));
   return r.players?.[key]?.score || 0;
 }
 // Display info for a final entity key
 function finalEntityInfo(r, key){
-  if (typeof key === 'string' && key.startsWith('t')) {
+  if (isTeamKey(key)) {
     const id = parseInt(key.slice(1), 10);
     const t = TEAM_PRESETS.find(x => x.id === id);
     const members = playersOfTeam(r, id);
@@ -87,8 +89,13 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.39';
+const APP_VERSION = '2.40';
 const CHANGELOG = [
+  { v: '2.40', date: '09.08.2026', changes: [
+    'Виправлено збереження зміненої ставки у фіналі (тепер показує причину, якщо не вийшло)',
+    'Виправлено «Команда NaN» — гравця могли помилково прийняти за команду',
+    'Пробіл більше не залипає після натискання кнопки мишкою',
+  ]},
   { v: '2.39', date: '09.08.2026', changes: [
     'У фіналі зʼявились швидкі ставки: 0, ¼, ½ і «ВСЕ» — не треба вписувати вручну',
   ]},
@@ -3098,6 +3105,7 @@ function viewFinalBidEditModal(){
         <div class="modal-subtitle">${av(info.avatar)} ${esc(info.name)} · максимум ${max}</div>
         <input type="number" class="input" id="edit-bid-input" min="0" max="${max}" value="${cur}"
           style="font-family:'Fraunces',serif; font-size:24px; font-weight:700; color:var(--gold); margin-top:16px;">
+        <div id="edit-bid-err" style="display:none; color:var(--accent); font-size:12px; margin-top:8px;"></div>
         <div class="modal-actions" style="flex-direction:column; gap:8px;">
           <button class="btn btn-gold btn-full" data-action="save-final-bid-edit">${icon('check',16)} Зберегти</button>
           <button class="btn btn-ghost btn-full" data-action="close-final-bid-edit">Скасувати</button>
@@ -3318,6 +3326,7 @@ function attachListeners(){
       ev.preventDefault();
       el._firedFast = true;
       handleAction(ev);
+      try { el.blur(); } catch (_) {}
       setTimeout(() => { el._firedFast = false; }, 400);
     }, { passive: false });
     el.addEventListener('click', (ev) => {
@@ -3568,6 +3577,12 @@ function attachListeners(){
 }
 
 async function handleAction(e){
+  // Buttons keep keyboard focus after a click, which makes the browser treat a
+  // later Space press as "press this button" instead of reaching our handler.
+  try {
+    const btn = e.currentTarget || e.target;
+    if (btn && btn.blur && btn.tagName === 'BUTTON') setTimeout(() => { try { btn.blur(); } catch(_){} }, 0);
+  } catch (_) {}
   const el = e.currentTarget;
   const action = el.dataset.action;
   switch (action) {
@@ -3875,11 +3890,21 @@ async function handleAction(e){
       if (!k2) break;
       const inp2 = document.getElementById('edit-bid-input');
       const v2 = inp2 ? parseInt(inp2.value, 10) : NaN;
-      const max2 = Math.max(FINAL_MIN_BID_CAP, finalEntityScore(state.room, k2));
-      if (!Number.isFinite(v2) || v2 < 0 || v2 > max2) break;
-      await update(ref(db, `rooms/${state.code}/finalBids/${k2}`), { bid: v2, bidSubmitted: true });
-      state.editingBidKey = null; state.editBidValue = null;
-      render(true); break;
+      let max2 = 0;
+      try { max2 = Math.max(FINAL_MIN_BID_CAP, finalEntityScore(state.room, k2) || 0); } catch (_) { max2 = FINAL_MIN_BID_CAP; }
+      const errEl = document.getElementById('edit-bid-err');
+      if (!Number.isFinite(v2) || v2 < 0 || v2 > max2) {
+        if (errEl) { errEl.style.display = 'block'; errEl.textContent = `Введи число від 0 до ${max2}`; }
+        break;
+      }
+      try {
+        await update(ref(db, `rooms/${state.code}/finalBids/${k2}`), { bid: v2, bidSubmitted: true });
+        state.editingBidKey = null; state.editBidValue = null;
+        render(true);
+      } catch (err) {
+        if (errEl) { errEl.style.display = 'block'; errEl.textContent = 'Не вдалося зберегти: ' + (err.message || err); }
+      }
+      break;
     }
     case 'open-ranking':
       state.showRanking = true;
@@ -5680,7 +5705,7 @@ async function judgeFinalPlayer(entityKey, verdict){
   else if (verdict === 'wrong') newScore = base - safeBid;
   // Idempotent: verdict + score recomputed from the pre-final base
   const patch = { [`finalJudgement/${entityKey}`]: verdict };
-  if (typeof entityKey === 'string' && entityKey.startsWith('t')) {
+  if (isTeamKey(entityKey)) {
     patch[`teamScores/${entityKey.slice(1)}`] = newScore;
   } else {
     patch[`players/${entityKey}/score`] = newScore;
