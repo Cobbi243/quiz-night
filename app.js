@@ -89,8 +89,11 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.42';
+const APP_VERSION = '2.43';
 const CHANGELOG = [
+  { v: '2.43', date: '09.08.2026', changes: [
+    'Сторінка більше не стрибає вгору після прикріплення аудіо чи відео',
+  ]},
   { v: '2.42', date: '09.08.2026', changes: [
     'На iPhone тепер видно аудіофайли при прикріпленні (зокрема голосові нотатки m4a)',
     'Зрозуміліші повідомлення, якщо файл завеликий або не читається',
@@ -1334,8 +1337,14 @@ function render(force){
     }
   }
 
+  const keepScroll = window.scrollY || document.documentElement.scrollTop || 0;
   appEl.innerHTML = html;
   attachListeners();
+  if (keepScroll > 0) {
+    // Restore after layout so the browser doesn't clamp it to 0
+    window.scrollTo(0, keepScroll);
+    requestAnimationFrame(() => window.scrollTo(0, keepScroll));
+  }
 
 
   // While chat is open, mark all current messages as seen
