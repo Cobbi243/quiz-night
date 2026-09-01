@@ -89,8 +89,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.41';
+const APP_VERSION = '2.42';
 const CHANGELOG = [
+  { v: '2.42', date: '09.08.2026', changes: [
+    'На iPhone тепер видно аудіофайли при прикріпленні (зокрема голосові нотатки m4a)',
+    'Зрозуміліші повідомлення, якщо файл завеликий або не читається',
+  ]},
   { v: '2.41', date: '09.08.2026', changes: [
     'НОВЕ: обʼєднання статистики з різних пристроїв за кодом',
     'Створюєш код на одному пристрої, вводиш на іншому — прогрес складається разом',
@@ -1285,8 +1289,8 @@ function render(force){
   if (state.room && state.room.testModeConfig) {
     overlay += `<div class="test-badge" title="Результати не зберігаються">🧪 ТЕСТОВА ГРА</div>`;
   }
-  overlay += `<input type="file" id="audio-input" accept="audio/*" style="display:none;">`;
-  overlay += `<input type="file" id="video-input" accept="video/*" style="display:none;">`;
+  overlay += `<input type="file" id="audio-input" accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.caf,.opus" style="display:none;">`;
+  overlay += `<input type="file" id="video-input" accept="video/*,.mp4,.mov,.m4v,.webm" style="display:none;">`;
   overlay += `<input type="file" id="avatar-input" accept="image/*" style="display:none;">`;
   if (state.room && state.code) overlay += viewChatWidget();
 
@@ -3547,7 +3551,8 @@ function attachListeners(){
       if (!f || !state.audioTarget) return;
       const MAX = 260_000; // ~260KB of base64
       if (f.size > 400_000) {
-        state.setupErr = 'Аудіофайл завеликий (максимум ~300 КБ, це приблизно 15-20 секунд). Запиши коротше.';
+        const kb = Math.round(f.size / 1024);
+        state.setupErr = `Аудіофайл завеликий: ${kb} КБ (ліміт ~400 КБ, це приблизно 15-20 секунд). Запиши коротший фрагмент або стисни файл.`;
         render(true); return;
       }
       try {
@@ -3570,7 +3575,7 @@ function attachListeners(){
         state.audioTarget = null;
         render(true);
       } catch (err) {
-        state.setupErr = 'Не вдалося прочитати аудіофайл';
+        state.setupErr = 'Не вдалося прочитати аудіофайл: ' + ((err && err.message) || 'невідома помилка');
         render(true);
       }
     });
