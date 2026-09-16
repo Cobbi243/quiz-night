@@ -712,6 +712,48 @@ html, body {
 }
 .chat-input-row .input { flex: 1; }
 
+/* ===== RESPONSIVE LAYOUT ===== */
+/* Phones */
+@media (max-width: 640px) {
+  .container, .container-lg { padding-left: 14px; padding-right: 14px; }
+  .board { gap: 5px; grid-template-rows: auto repeat(5, minmax(56px, 1fr)); }
+  .board-wrap { padding: 10px; border-radius: var(--r-lg); }
+  .board-cell { font-size: clamp(15px, 5vw, 24px); border-radius: var(--r-sm); }
+  .board-header { min-height: 46px; max-height: 66px; padding: 6px 4px; }
+  .board-header .cat-name { font-size: clamp(8px, 2.6vw, 11px); -webkit-line-clamp: 4; }
+  .q-value { font-size: 24px; }
+  .buzz-btn { padding: 18px 24px; font-size: 18px; }
+  .player-bar { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+  .hero-title { font-size: clamp(44px, 16vw, 76px); }
+  .modal { width: calc(100vw - 24px); padding: 18px; }
+  .chat-panel { width: calc(100vw - 20px); height: 70vh; right: 10px; bottom: 10px; }
+  .qs-stage-header { padding: 14px 14px 8px; }
+  .qs-stage-body { padding: 6px 14px 16px; }
+}
+
+/* Tablets */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .board { gap: 6px; grid-template-rows: auto repeat(5, minmax(68px, 1fr)); }
+  .board-cell { font-size: clamp(18px, 3.2vw, 30px); }
+  .board-header .cat-name { font-size: clamp(9px, 1.6vw, 13px); }
+  .player-bar { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+}
+
+/* Wide screens — keep things from stretching too far apart */
+@media (min-width: 1600px) {
+  .container { max-width: 820px; }
+  .container-lg, .question-screen { max-width: 1320px; }
+  .board { grid-template-rows: auto repeat(5, minmax(96px, 1fr)); }
+}
+
+/* Short windows (landscape phones): trim vertical padding so the buzzer fits */
+@media (max-height: 560px) {
+  .qs-stage-header { padding: 10px 16px 6px; }
+  .qs-stage-body { padding: 4px 16px 10px; }
+  .buzz-btn { padding: 14px 20px; font-size: 17px; }
+  .qs-controls { padding: 8px 0 10px; }
+}
+
 /* ===== HOME SCREEN ===== */
 .home-screen {
   position: relative;
@@ -923,6 +965,6 @@ html, body {
 </div>
 <div id="overlay-root"></div>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script type="module" src="app.js?v=202609121200"></script>
+<script type="module" src="app.js?v=202609121400"></script>
 </body>
 </html>
