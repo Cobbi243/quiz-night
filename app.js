@@ -89,8 +89,15 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.43';
+const APP_VERSION = '2.45';
 const CHANGELOG = [
+  { v: '2.45', date: '12.09.2026', changes: [
+    'Технічне: шрифти, відступи, заокруглення й тіні винесені в змінні',
+    'Тепер вигляд можна міняти, правлячи лише значення на початку index.html',
+  ]},
+  { v: '2.44', date: '09.08.2026', changes: [
+    'Довгі назви категорій більше не розтягують дошку — переносяться і обрізаються',
+  ]},
   { v: '2.43', date: '09.08.2026', changes: [
     'Сторінка більше не стрибає вгору після прикріплення аудіо чи відео',
   ]},
@@ -1367,7 +1374,7 @@ function viewSetupNeeded(){
   return `
     <div class="container slide-up" style="margin-top:48px;">
       <div class="eyebrow">QUIZ NIGHT</div>
-      <h1 style="font-family:'Fraunces',serif; font-size:48px; font-weight:900; margin-bottom:24px;">
+      <h1 style="font-family:var(--font-display); font-size:48px; font-weight:900; margin-bottom:24px;">
         Налаштування потрібне
       </h1>
       <div class="setup-warning">
@@ -1424,7 +1431,7 @@ function viewJoin(){
   return `
     <button class="back-btn" data-action="go-home">${icon('arrowLeft',16)} Назад</button>
     <div class="container-sm slide-up">
-      <h2 style="font-family:'Fraunces',serif; font-size:48px; font-weight:700; margin-bottom:8px;">Долучитися</h2>
+      <h2 style="font-family:var(--font-display); font-size:48px; font-weight:700; margin-bottom:8px;">Долучитися</h2>
       <p style="color:var(--ink-dim); margin-bottom:40px;">Введи код кімнати від ведучого</p>
       <input class="input input-code" id="join-code" maxlength="4" placeholder="ABCD" autocomplete="off" value="${esc(state.joinCodeInput)}">
       <input class="input" id="join-name" maxlength="20" placeholder="Твій нікнейм" style="text-align:center; margin-top:32px;" autocomplete="off" value="${esc(savedName)}">
@@ -1452,7 +1459,7 @@ function viewHostSetup(){
     <button class="back-btn" data-action="go-home">${icon('arrowLeft',16)} Назад</button>
     <div class="container-sm slide-up">
       <div class="host-badge">${icon('crown',14)} ВЕДУЧИЙ</div>
-      <h2 style="font-family:'Fraunces',serif; font-size:48px; font-weight:700; margin-bottom:8px;">Нова кімната</h2>
+      <h2 style="font-family:var(--font-display); font-size:48px; font-weight:700; margin-bottom:8px;">Нова кімната</h2>
       <p style="color:var(--ink-dim); margin-bottom:40px;">Ти керуєш грою: відкриваєш питання і вирішуєш чи правильна відповідь</p>
       <input class="input" id="host-name" maxlength="20" placeholder="Твій нікнейм" style="text-align:center;" autocomplete="off" value="${esc(savedName)}">
       <div style="margin-top:24px;">
@@ -1490,7 +1497,7 @@ function viewLobby(){
       </div>
       <div class="card" style="margin-bottom:24px;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <h3 style="font-family:'Fraunces',serif; font-size:24px; font-weight:700;">Гравці</h3>
+          <h3 style="font-family:var(--font-display); font-size:24px; font-weight:700;">Гравці</h3>
           <div style="font-size:14px; color:var(--ink-dim);">${playerList.length}</div>
         </div>
         ${isTeamMode(r) && state.isHost ? `
@@ -1534,7 +1541,7 @@ function viewLobby(){
       ` : `
         <div class="card" style="text-align:center; padding:40px;">
           <span class="spin" style="color:var(--gold);">${icon('loader',32)}</span>
-          <div style="font-family:'Fraunces',serif; font-size:22px; font-weight:700; margin-top:12px;">Очікуємо ведучого...</div>
+          <div style="font-family:var(--font-display); font-size:22px; font-weight:700; margin-top:12px;">Очікуємо ведучого...</div>
           <div style="color:var(--ink-dim); font-size:13px; margin-top:8px;">Ведучий обирає категорії та питання</div>
         </div>
       `}
@@ -1564,7 +1571,7 @@ function viewModeSelect(){
   return `
     <button class="back-btn" data-action="leave-mode-select">${icon('arrowLeft',16)} Назад в лоббі</button>
     <div class="container slide-up">
-      <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-bottom:8px;">Налаштування гри</h2>
+      <h2 style="font-family:var(--font-display); font-size:36px; font-weight:700; margin-bottom:8px;">Налаштування гри</h2>
       <p style="color:var(--ink-dim); margin-bottom:24px;">Обери кількість раундів, завантаж паки і налаштуй таймери. Старт — коли все готово.</p>
 
       <div style="font-size:13px; color:var(--ink-dim); margin-bottom:10px;">КІЛЬКІСТЬ РАУНДІВ</div>
@@ -1671,7 +1678,7 @@ function viewQuestionSetup(){
     <div class="container slide-up">
       <div class="eyebrow" style="margin-bottom:8px;">${roundLabel}</div>
       ${!src ? `
-        <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-bottom:8px;">Звідки питання?</h2>
+        <h2 style="font-family:var(--font-display); font-size:36px; font-weight:700; margin-bottom:8px;">Звідки питання?</h2>
         <p style="color:var(--ink-dim); margin-bottom:32px;">6 категорій × 5 питань${mult > 1 ? ` (бали ×${mult}: ${VALUES.map(v=>v*mult).join('/')})`: ' (200/400/600/800/1000)'}</p>
         <div style="display:grid; gap:12px;">
           <button class="source-card" data-action="set-source" data-source="saved">
@@ -1709,7 +1716,7 @@ function viewQuestionSetup(){
 function viewSetupSaved(){
   return `
     <button class="back-btn" data-action="set-source" data-source="">${icon('arrowLeft',14)} Інше джерело</button>
-    <h2 style="font-family:'Fraunces',serif; font-size:32px; font-weight:700; margin-bottom:24px;">Мої збережені паки</h2>
+    <h2 style="font-family:var(--font-display); font-size:32px; font-weight:700; margin-bottom:24px;">Мої збережені паки</h2>
     ${state.savedPacks.length === 0 ? `
       <div class="info-text">Поки немає збережених паків. Створи через AI, файл або вручну — і збережи з кнопкою «Зберегти в БД».</div>
     ` : `
@@ -1735,7 +1742,7 @@ function viewSetupPreset(){
   const p = SAMPLE_PACK;
   return `
     <button class="back-btn" data-action="set-source" data-source="">${icon('arrowLeft',14)} Інше джерело</button>
-    <h2 style="font-family:'Fraunces',serif; font-size:32px; font-weight:700; margin-bottom:24px;">Готовий пак</h2>
+    <h2 style="font-family:var(--font-display); font-size:32px; font-weight:700; margin-bottom:24px;">Готовий пак</h2>
     <div class="card" style="margin-bottom:16px;">
       <div style="font-weight:700; font-size:18px; margin-bottom:12px;">${esc(p.name)}</div>
       <div style="color:var(--ink-dim); font-size:14px; margin-bottom:16px;">${p.categories.length} категорій, ${p.categories.length*QS_PER_CAT} питань</div>
@@ -1753,7 +1760,7 @@ function viewSetupFile(){
   const p = state.setupFilePack;
   return `
     <button class="back-btn" data-action="set-source" data-source="">${icon('arrowLeft',14)} Інше джерело</button>
-    <h2 style="font-family:'Fraunces',serif; font-size:32px; font-weight:700; margin-bottom:8px;">Завантажити з файлу</h2>
+    <h2 style="font-family:var(--font-display); font-size:32px; font-weight:700; margin-bottom:8px;">Завантажити з файлу</h2>
     <p style="color:var(--ink-dim); margin-bottom:24px;">Підтримуються <b>.docx</b> (з картинками) і <b>.txt</b></p>
 
     ${!p ? `
@@ -1839,7 +1846,7 @@ function viewSetupFile(){
 function viewSetupAi(){
   return `
     <button class="back-btn" data-action="set-source" data-source="">${icon('arrowLeft',14)} Інше джерело</button>
-    <h2 style="font-family:'Fraunces',serif; font-size:32px; font-weight:700; margin-bottom:8px;">AI-генерація</h2>
+    <h2 style="font-family:var(--font-display); font-size:32px; font-weight:700; margin-bottom:8px;">AI-генерація</h2>
     <p style="color:var(--ink-dim); margin-bottom:24px;">Введи 6 тем — Claude складе пак з 30 питань</p>
     ${!state.setupAiPreview ? `
       <div class="card" style="margin-bottom:16px;">
@@ -1885,11 +1892,11 @@ function viewSetupManual(){
   const p = state.setupManualPack;
   return `
     <button class="back-btn" data-action="set-source" data-source="">${icon('arrowLeft',14)} Інше джерело</button>
-    <h2 style="font-family:'Fraunces',serif; font-size:32px; font-weight:700; margin-bottom:8px;">Свій пак</h2>
+    <h2 style="font-family:var(--font-display); font-size:32px; font-weight:700; margin-bottom:8px;">Свій пак</h2>
     <p style="color:var(--ink-dim); margin-bottom:24px;">6 категорій × 5 питань. Натисни 📷 щоб додати картинку до питання або до відповіді.</p>
     ${p.categories.map((cat, ci) => `
       <div class="q-builder-card">
-        <input class="input" data-name="cat-name" data-key="${ci}" placeholder="Назва категорії №${ci+1}..." value="${esc(cat.name)}" autocomplete="off" style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--gold); margin-bottom:12px; padding:6px 0;">
+        <input class="input" data-name="cat-name" data-key="${ci}" placeholder="Назва категорії №${ci+1}..." value="${esc(cat.name)}" autocomplete="off" style="font-family:var(--font-display); font-weight:700; font-size:18px; color:var(--gold); margin-bottom:12px; padding:6px 0;">
         ${cat.questions.map((q, qi) => `
           <div style="padding:8px 0; border-bottom: 1px solid var(--line);">
             <div class="q-builder-question">
@@ -1965,7 +1972,7 @@ function viewBoard(){
       ` : ''}
       <div class="board-wrap">
         <div class="board">
-          ${cats.map(c => `<div class="board-header"><div class="cat-name">${esc(c.name)}</div></div>`).join('')}
+          ${cats.map(c => `<div class="board-header" title="${esc(c.name)}"><div class="cat-name">${esc(c.name)}</div></div>`).join('')}
           ${VALUES.map((_v, vi) =>
             cats.map((c, ci) => {
               const used = r.usedCells && r.usedCells[`${ci}-${vi}`];
@@ -2053,7 +2060,7 @@ function viewQuestion(){
     stageBody = `
       <div style="text-align:center;">
         <div style="font-size:64px; line-height:1; margin-bottom:8px;">🎲</div>
-        <div style="font-family:'Fraunces',serif; font-weight:900; font-size:clamp(28px,5vw,52px); color:var(--gold);">СВОЯ ГРА!</div>
+        <div style="font-family:var(--font-display); font-weight:900; font-size:clamp(28px,5vw,52px); color:var(--gold);">СВОЯ ГРА!</div>
         <div style="margin-top:12px; font-size:16px; color:var(--ink-dim);">
           ${ddP ? `${av(ddP.avatar)} <b style="color:var(--ink);">${esc(ddP.name)}</b>${ddTeam ? ` <span style="color:${ddTeam.color};">(${ddTeam.emoji} ${esc(ddTeam.name)})</span>` : ''} ставить свої бали` : 'Гравець ставить бали'}
         </div>
@@ -2151,7 +2158,7 @@ function viewQuestion(){
         <div class="host-answer-box">
           <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">ВІДПОВІДЬ (ТІЛЬКИ ТИ БАЧИШ)</div>
           ${q.answerImage ? `<img src="${q.answerImage}" style="max-height:300px; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
-          ${q.a && q.a.trim() ? `<div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--green); white-space:pre-wrap;">${escMultiline(q.a)}</div>` : ''}
+          ${q.a && q.a.trim() ? `<div style="font-family:var(--font-display); font-weight:700; font-size:18px; color:var(--green); white-space:pre-wrap;">${escMultiline(q.a)}</div>` : ''}
           ${q.explanation && q.explanation.trim() ? `<div style="margin-top:6px; font-size:14px; font-weight:500; color:var(--green); opacity:0.8; white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
         </div>
       ` : ''}`;
@@ -2201,7 +2208,7 @@ function viewQuestion(){
         <div class="card" style="max-width:420px; margin:0 auto; width:100%;">
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">СТАВКА (0 — ${max})</div>
           <input type="number" class="input" id="dd-bid" min="0" max="${max}" value="${cur}"
-            style="font-family:'Fraunces',serif; font-size:24px; font-weight:700; color:var(--gold);">
+            style="font-family:var(--font-display); font-size:24px; font-weight:700; color:var(--gold);">
           <div id="dd-bid-err" style="display:none; color:var(--accent); font-size:12px; margin-top:6px;">Ставка має бути від 0 до ${max}</div>
           <button class="btn btn-gold btn-lg btn-full" id="dd-submit-btn" data-action="submit-dd-bid" style="margin-top:12px;">
             ${icon('check',18)} Підтвердити ставку
@@ -2249,7 +2256,7 @@ function viewQuestion(){
     const sec = Math.max(0, Math.ceil((r.countdownDeadline - serverNow()) / 1000));
     controls += `<div style="text-align:center; padding:8px 0;">
       <div style="font-size:12px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">Базер відкриється через</div>
-      <div id="countdown-num" style="font-family:'Fraunces',serif; font-weight:900; font-size:56px; color:var(--gold); line-height:1;">${sec}</div>
+      <div id="countdown-num" style="font-family:var(--font-display); font-weight:900; font-size:56px; color:var(--gold); line-height:1;">${sec}</div>
       <div style="margin-top:4px; font-size:13px; color:var(--ink-dim);">${state.isHost ? 'Читай питання вголос!' : 'Приготуйся натискати!'}</div>
     </div>`;
     if (!state.isHost && r.antiSpamConfig && !iAttempted) {
@@ -2367,7 +2374,7 @@ function viewResults(){
       <div class="container slide-up" style="min-height:calc(100vh - 48px); display:flex; flex-direction:column; justify-content:center;">
         <div style="text-align:center; margin-bottom:40px;">
           <div class="eyebrow">ФІНАЛ</div>
-          <h2 style="font-family:'Fraunces',serif; font-size:56px; font-weight:900; margin-bottom:24px;">Команда-переможець</h2>
+          <h2 style="font-family:var(--font-display); font-size:56px; font-weight:900; margin-bottom:24px;">Команда-переможець</h2>
           ${win ? `
             <div class="winner-card" style="border-color:${win.color};">
               <div class="winner-emoji">${win.emoji}</div>
@@ -2392,7 +2399,7 @@ function viewResults(){
           `).join('')}
         </div>
         ${(state.newAchievements && state.newAchievements.length) ? `
-          <div class="card" style="margin-bottom:16px; border-color:rgba(240,180,41,0.5); background:rgba(240,180,41,0.07);">
+          <div class="card" style="margin-bottom:16px; border-color:var(--gold-a45); background:var(--gold-a08);">
             <div style="font-size:12px; color:var(--gold); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:8px;">🎉 Нові досягнення</div>
             <div style="display:flex; flex-wrap:wrap; gap:10px;">
               ${state.newAchievements.map(id => {
@@ -2420,7 +2427,7 @@ function viewResults(){
     <div class="container slide-up" style="min-height:calc(100vh - 48px); display:flex; flex-direction:column; justify-content:center;">
       <div style="text-align:center; margin-bottom:40px;">
         <div class="eyebrow">ФІНАЛ</div>
-        <h2 style="font-family:'Fraunces',serif; font-size:64px; font-weight:900; margin-bottom:24px;">Переможець</h2>
+        <h2 style="font-family:var(--font-display); font-size:64px; font-weight:900; margin-bottom:24px;">Переможець</h2>
         ${winner ? `
           <div class="winner-card">
             <div class="winner-emoji">${av(winner.avatar)}</div>
@@ -2441,7 +2448,7 @@ function viewResults(){
         `).join('')}
       </div>
       ${(state.newAchievements && state.newAchievements.length) ? `
-        <div class="card" style="margin-bottom:16px; border-color:rgba(240,180,41,0.5); background:rgba(240,180,41,0.07);">
+        <div class="card" style="margin-bottom:16px; border-color:var(--gold-a45); background:var(--gold-a08);">
           <div style="font-size:12px; color:var(--gold); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:8px;">🎉 Нові досягнення</div>
           <div style="display:flex; flex-wrap:wrap; gap:10px;">
             ${state.newAchievements.map(id => {
@@ -2475,7 +2482,7 @@ function viewRoundDone(){
     <div class="container slide-up" style="padding-top:24px;">
       <div style="text-align:center; margin-bottom:32px;">
         <div class="eyebrow">РАУНД ${r.currentRound} ЗАВЕРШЕНО</div>
-        <h2 style="font-family:'Fraunces',serif; font-size:48px; font-weight:900; margin-top:8px;">
+        <h2 style="font-family:var(--font-display); font-size:48px; font-weight:900; margin-top:8px;">
           ${isLastRegularRound ? 'Останній раунд позаду' : `Раунд ${r.currentRound} з ${r.roundsTotal}`}
         </h2>
       </div>
@@ -2544,7 +2551,7 @@ function viewFinalSetup(){
     <button class="back-btn" data-action="${isSetupPhase ? 'leave-final-to-modeselect' : 'leave-final-setup'}">${icon('arrowLeft',16)} Назад</button>
     <div class="container slide-up">
       <div class="eyebrow">ФІНАЛЬНИЙ РАУНД</div>
-      <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-bottom:8px; margin-top:8px;">Питання для фіналу</h2>
+      <h2 style="font-family:var(--font-display); font-size:36px; font-weight:700; margin-bottom:8px; margin-top:8px;">Питання для фіналу</h2>
       <p style="color:var(--ink-dim); margin-bottom:32px;">Гравці поставлять до своїх балів і напишуть відповідь у формі. Ти потім перевіриш кожного.</p>
       <div class="card">
         <input class="input" id="final-cat" placeholder="Категорія (напр. «Світова історія»)" value="${esc(fq.category)}" autocomplete="off" style="margin-bottom:24px;">
@@ -2581,13 +2588,13 @@ function viewFinalBid(){
     return `
       <div class="container slide-up" style="padding-top:24px;" data-final-key="bid-host">
         <div class="eyebrow">ФІНАЛ · ФАЗА 1 · СТАВКИ</div>
-        <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-top:8px; margin-bottom:8px;">${esc(r.finalQ.category)}</h2>
+        <h2 style="font-family:var(--font-display); font-size:36px; font-weight:700; margin-top:8px; margin-bottom:8px;">${esc(r.finalQ.category)}</h2>
         <p style="color:var(--ink-dim); margin-bottom:24px;">${teamMode ? 'Команди' : 'Гравці'} бачать тільки категорію і ставлять бали. Питання покажеться у фазі 2.</p>
         <div class="card" style="margin-bottom:16px;">
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px;">ПИТАННЯ (тільки ти бачиш)</div>
-          <div style="font-family:'Fraunces',serif; font-size:20px; font-weight:700; margin-bottom:12px;">${esc(r.finalQ.q)}</div>
+          <div style="font-family:var(--font-display); font-size:20px; font-weight:700; margin-bottom:12px;">${esc(r.finalQ.q)}</div>
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ВІДПОВІДЬ</div>
-          <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--green);">${esc(r.finalQ.a)}</div>
+          <div style="font-family:var(--font-display); font-size:18px; font-weight:700; color:var(--green);">${esc(r.finalQ.a)}</div>
         </div>
         <div class="card" style="margin-bottom:16px;" data-final-list>
           <div style="font-size:14px; color:var(--ink-dim); margin-bottom:12px;">
@@ -2639,23 +2646,23 @@ function viewFinalBid(){
   return `
     <div class="container slide-up" style="padding-top:24px;">
       <div class="eyebrow">ФІНАЛ · ФАЗА 1 · СТАВКА</div>
-      <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:900; margin-top:8px;">${esc(r.finalQ.category)}</h2>
+      <h2 style="font-family:var(--font-display); font-size:36px; font-weight:900; margin-top:8px;">${esc(r.finalQ.category)}</h2>
       ${teamMode ? `<div style="margin-top:8px; font-size:14px; color:${myInfo.color}; font-weight:700;">${av(myInfo.avatar)} ${esc(myInfo.name)} — ставка спільна на команду</div>` : ''}
       <p style="color:var(--ink-dim); margin-top:8px; margin-bottom:24px;">Постав скільки балів готовий поставити на правильну відповідь. Питання покажуть після того як всі поставлять.</p>
       ${bidAlreadySubmitted ? `
         <div class="card" style="text-align:center;">
           <div style="font-size:48px; margin-bottom:12px;">✓</div>
           <div style="font-size:14px; color:var(--ink-dim); margin-bottom:4px;">${teamMode ? 'СТАВКА КОМАНДИ' : 'ТВОЯ СТАВКА'}</div>
-          <div style="font-family:'Fraunces',serif; font-size:42px; font-weight:900; color:var(--gold);">${myBid.bid}</div>
+          <div style="font-family:var(--font-display); font-size:42px; font-weight:900; color:var(--gold);">${myBid.bid}</div>
           ${teamMode && myBid.byName ? `<div style="margin-top:6px; font-size:12px; color:var(--ink-faint);">поставив ${esc(myBid.byName)}</div>` : ''}
           <div style="margin-top:12px; color:var(--ink-dim); font-size:13px;">Очікуємо решту і питання від ведучого</div>
         </div>
       ` : `
         <div class="card">
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">${teamMode ? 'БАЛИ КОМАНДИ' : 'ТВОЇ БАЛИ'}</div>
-          <div style="font-family:'Fraunces',serif; font-size:36px; font-weight:900; color:var(--gold); margin-bottom:16px;">${curScore}</div>
+          <div style="font-family:var(--font-display); font-size:36px; font-weight:900; color:var(--gold); margin-bottom:16px;">${curScore}</div>
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">СКІЛЬКИ СТАВИШ (0 — ${myScore})</div>
-          <input type="number" class="input" id="final-bid" min="0" max="${myScore}" value="${bid}" style="font-family:'Fraunces',serif; font-size:24px; font-weight:700; color:var(--accent);">
+          <input type="number" class="input" id="final-bid" min="0" max="${myScore}" value="${bid}" style="font-family:var(--font-display); font-size:24px; font-weight:700; color:var(--accent);">
           <div class="bid-quick-row">
             <button class="btn btn-ghost btn-sm" data-action="quick-bid" data-bid="0">0</button>
             <button class="btn btn-ghost btn-sm" data-action="quick-bid" data-bid="${Math.floor(myScore/4)}">¼</button>
@@ -2689,7 +2696,7 @@ function viewFinalAnswer(){
     return `
       <div class="container slide-up" style="padding-top:24px;">
         <div class="eyebrow">ФІНАЛ · ФАЗА 2 · ВІДПОВІДЬ</div>
-        <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-top:8px; margin-bottom:8px;">${esc(r.finalQ.category)}</h2>
+        <h2 style="font-family:var(--font-display); font-size:36px; font-weight:700; margin-top:8px; margin-bottom:8px;">${esc(r.finalQ.category)}</h2>
         ${r.finalPhaseDeadline ? (() => {
           const sec = Math.max(0, Math.ceil((r.finalPhaseDeadline - serverNow()) / 1000));
           const pct = Math.min(100, (sec / FINAL_SECONDS) * 100);
@@ -2700,9 +2707,9 @@ function viewFinalAnswer(){
         })() : ''}
         <div class="card" style="margin-top:24px;">
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px;">ПИТАННЯ</div>
-          <div style="font-family:'Fraunces',serif; font-size:22px; font-weight:700; margin-bottom:16px;">${esc(r.finalQ.q)}</div>
+          <div style="font-family:var(--font-display); font-size:22px; font-weight:700; margin-bottom:16px;">${esc(r.finalQ.q)}</div>
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ВІДПОВІДЬ</div>
-          <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--green);">${esc(r.finalQ.a)}</div>
+          <div style="font-family:var(--font-display); font-size:18px; font-weight:700; color:var(--green);">${esc(r.finalQ.a)}</div>
         </div>
         <div class="card" style="margin-top:16px;">
           <div style="font-size:14px; color:var(--ink-dim); margin-bottom:12px;">
@@ -2737,7 +2744,7 @@ function viewFinalAnswer(){
     return `
       <div class="container slide-up" style="padding-top:24px;">
         <div class="eyebrow">ФІНАЛ · ВІДПОВІДЬ ПОДАНО</div>
-        <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin-top:8px;">Готово</h2>
+        <h2 style="font-family:var(--font-display); font-size:36px; font-weight:700; margin-top:8px;">Готово</h2>
         <div class="card" style="margin-top:24px; text-align:center;">
           <div style="font-size:48px; margin-bottom:12px;">✓</div>
           <div style="color:var(--ink-dim); margin-bottom:12px;">Очікуємо решту і вердикт ведучого</div>
@@ -2753,7 +2760,7 @@ function viewFinalAnswer(){
   return `
     <div class="container slide-up" style="padding-top:24px;">
       <div class="eyebrow">ФІНАЛ · ФАЗА 2 · ВІДПОВІДЬ</div>
-      <h2 style="font-family:'Fraunces',serif; font-size:32px; font-weight:900; margin-top:8px;">${esc(r.finalQ.category)}</h2>
+      <h2 style="font-family:var(--font-display); font-size:32px; font-weight:900; margin-top:8px;">${esc(r.finalQ.category)}</h2>
       ${r.finalPhaseDeadline ? (() => {
         const sec = Math.max(0, Math.ceil((r.finalPhaseDeadline - serverNow()) / 1000));
         const pct = Math.min(100, (sec / FINAL_SECONDS) * 100);
@@ -2765,7 +2772,7 @@ function viewFinalAnswer(){
       <p style="color:var(--ink-dim); margin-top:8px; margin-bottom:16px;">${teamMode ? 'Ставка команди' : 'Твоя ставка'}: <b style="color:var(--gold);">${myBid?.bid ?? 0}</b> балів. Напиши відповідь — встигни до закінчення часу.${teamMode ? ' <b>Відповідь одна на команду</b> — домовтесь хто подає.' : ''}</p>
       <div class="card">
         <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px;">ПИТАННЯ</div>
-        <div style="font-family:'Fraunces',serif; font-size:22px; font-weight:700; margin-bottom:16px;">${esc(r.finalQ.q)}</div>
+        <div style="font-family:var(--font-display); font-size:22px; font-weight:700; margin-bottom:16px;">${esc(r.finalQ.q)}</div>
         <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ТВОЯ ВІДПОВІДЬ</div>
         <input class="input" id="final-answer" placeholder="Напиши відповідь..." value="${esc(ans)}" autocomplete="off">
       </div>
@@ -2810,7 +2817,7 @@ function viewFinalReveal(){
     const curScore = finalEntityScore(r, k);
     const verdict = judgement[k];
     const safeBid = (typeof sub.bid === 'number' && !isNaN(sub.bid)) ? sub.bid : 0;
-    const borderClr = verdict === 'correct' ? 'rgba(74,222,128,0.5)' : verdict === 'wrong' ? 'rgba(232,74,48,0.5)' : 'var(--line)';
+    const borderClr = verdict === 'correct' ? 'var(--green-a50)' : verdict === 'wrong' ? 'var(--accent-a40)' : 'var(--line)';
     return `<div class="card" style="margin-bottom:10px; border-color:${borderClr}; opacity:0.9;">
       <div style="display:flex; align-items:center; gap:10px;">
         <span style="font-size:20px;">${av(info.avatar)}</span>
@@ -2820,7 +2827,7 @@ function viewFinalReveal(){
         </div>
         <div style="text-align:right;">
           <div style="font-size:12px; font-weight:700; color:${verdict==='correct'?'var(--green)':'var(--accent)'};">${verdict==='correct'?'✓':'✗'}</div>
-          <div style="font-family:'Fraunces',serif; font-weight:900; font-size:18px; color:${curScore<0?'var(--accent)':'var(--gold)'};">
+          <div style="font-family:var(--font-display); font-weight:900; font-size:18px; color:${curScore<0?'var(--accent)':'var(--gold)'};">
             <span style="color:var(--ink-faint); font-size:12px;">${baseScore}→</span>${curScore}
           </div>
         </div>
@@ -2840,16 +2847,16 @@ function viewFinalReveal(){
     return `<div class="card spotlight-card" style="border:2px solid ${borderClr}; padding:24px;">
       <div style="text-align:center; margin-bottom:16px;">
         <div style="font-size:48px; margin-bottom:4px;">${av(info.avatar)}</div>
-        <div style="font-family:'Fraunces',serif; font-weight:900; font-size:24px; ${teamMode?`color:${info.color};`:''}">${esc(info.name)}</div>
+        <div style="font-family:var(--font-display); font-weight:900; font-size:24px; ${teamMode?`color:${info.color};`:''}">${esc(info.name)}</div>
         ${teamMode && info.members.length ? `<div style="font-size:12px; color:var(--ink-faint); margin-top:2px;">${info.members.map(m => `${av(m.avatar)} ${esc(m.name)}`).join(' · ')}</div>` : ''}
         <div style="font-size:13px; color:var(--gold); font-weight:700; margin-top:4px;">поставив ${safeBid} балів</div>
       </div>
       <div style="background:var(--soft); padding:16px; border-radius:12px; text-align:center; margin-bottom:16px;">
         <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:6px;">ВІДПОВІДЬ</div>
         ${sub.answerSubmitted && sub.answer ? `
-          <div style="font-family:'Fraunces',serif; font-weight:700; font-size:24px;">${esc(sub.answer)}</div>
+          <div style="font-family:var(--font-display); font-weight:700; font-size:24px;">${esc(sub.answer)}</div>
         ` : `
-          <div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; color:var(--accent);">⏱ Не встиг відповісти</div>
+          <div style="font-family:var(--font-display); font-weight:700; font-size:18px; color:var(--accent);">⏱ Не встиг відповісти</div>
         `}
       </div>
       ${verdict ? `
@@ -2858,7 +2865,7 @@ function viewFinalReveal(){
             ${verdict==='correct'?'✓ ПРАВИЛЬНО':'✗ НЕПРАВИЛЬНО'}
           </span>
         </div>
-        <div style="text-align:center; font-family:'Fraunces',serif; font-weight:900; font-size:32px;">
+        <div style="text-align:center; font-family:var(--font-display); font-weight:900; font-size:32px;">
           <span style="color:var(--ink-faint); font-size:20px;">${baseScore}</span>
           <span style="color:var(--ink-faint);"> → </span>
           <span style="color:${curScore<0?'var(--accent)':'var(--gold)'};">${curScore}</span>
@@ -2888,13 +2895,13 @@ function viewFinalReveal(){
   return `
     <div class="container slide-up" style="padding-top:24px;">
       <div class="eyebrow">ФІНАЛ · ПЕРЕВІРКА ВІДПОВІДЕЙ ${total > 0 ? `· ${Math.min(revealIdx+1, total)}/${total}` : ''}</div>
-      <h2 style="font-family:'Fraunces',serif; font-size:28px; font-weight:700; margin-top:8px;">${esc(r.finalQ.category)}</h2>
+      <h2 style="font-family:var(--font-display); font-size:28px; font-weight:700; margin-top:8px;">${esc(r.finalQ.category)}</h2>
       <div class="card" style="margin-top:12px;">
         <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ПИТАННЯ</div>
-        <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:700; margin-bottom:12px;">${esc(r.finalQ.q)}</div>
+        <div style="font-family:var(--font-display); font-size:18px; font-weight:700; margin-bottom:12px;">${esc(r.finalQ.q)}</div>
         ${r.finalQ.answerImage ? `<img src="${r.finalQ.answerImage}" style="max-height:470px; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
         <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">ПРАВИЛЬНА ВІДПОВІДЬ</div>
-        <div style="font-family:'Fraunces',serif; font-size:18px; font-weight:700; color:var(--green);">${esc(r.finalQ.a)}</div>
+        <div style="font-family:var(--font-display); font-size:18px; font-weight:700; color:var(--green);">${esc(r.finalQ.a)}</div>
       </div>
 
       ${revealIdx > 0 ? `
@@ -2926,7 +2933,7 @@ function viewFinalReveal(){
                 <div style="display:flex; align-items:center; gap:10px;">
                   <span style="font-size:20px;">${av(info.avatar)}</span>
                   <div style="flex:1;">${esc(info.name)}</div>
-                  <div style="font-family:'Fraunces',serif; font-weight:900; color:${sc<0?'var(--accent)':'var(--gold)'};">${sc}</div>
+                  <div style="font-family:var(--font-display); font-weight:900; color:${sc<0?'var(--accent)':'var(--gold)'};">${sc}</div>
                 </div>
               </div>
             `;}).join('')}
@@ -2973,7 +2980,7 @@ function viewChatWidget(){
   return `
     <div class="chat-panel">
       <div class="chat-header">
-        <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px;">💬 Чат</div>
+        <div style="font-family:var(--font-display); font-weight:700; font-size:16px;">💬 Чат</div>
         <button class="chat-close" data-action="close-chat">${icon('x', 18)}</button>
       </div>
       <div class="chat-messages" id="chat-messages">
@@ -3012,7 +3019,7 @@ function viewStats(){
     <button class="back-btn" data-action="close-stats">${icon('arrowLeft',16)} Назад</button>
     <div class="container slide-up">
       <div class="eyebrow">ОСОБИСТА СТАТИСТИКА</div>
-      <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin:8px 0 4px;">
+      <h2 style="font-family:var(--font-display); font-size:36px; font-weight:700; margin:8px 0 4px;">
         ${prof ? `${av(prof.avatar)} ${esc(prof.name || 'Гравець')}` : 'Ще нема даних'}
       </h2>
       <p style="color:var(--ink-dim); margin-bottom:24px; font-size:13px;">
@@ -3064,13 +3071,13 @@ function viewStats(){
       ` : ''}
 
       <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px;">
-        <h3 style="font-family:'Fraunces',serif; font-size:22px; font-weight:700;">Досягнення</h3>
+        <h3 style="font-family:var(--font-display); font-size:22px; font-weight:700;">Досягнення</h3>
         <span style="font-size:13px; color:var(--ink-dim);">${unlockedCount} / ${ACHIEVEMENTS.length}</span>
       </div>
       <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:10px;">
         ${ACHIEVEMENTS.map(a => {
           const got = !!unlocked[a.id];
-          return `<div class="card" style="padding:14px; ${got ? 'border-color:rgba(240,180,41,0.45);' : 'opacity:0.45;'}">
+          return `<div class="card" style="padding:14px; ${got ? 'border-color:var(--gold-a45);' : 'opacity:0.45;'}">
             <div style="font-size:26px; margin-bottom:6px; ${got ? '' : 'filter:grayscale(1);'}">${a.emoji}</div>
             <div style="font-weight:700; font-size:14px; ${got ? 'color:var(--gold);' : ''}">${esc(a.name)}</div>
             <div style="font-size:11px; color:var(--ink-dim); margin-top:2px; line-height:1.35;">${esc(a.desc)}</div>
@@ -3080,7 +3087,7 @@ function viewStats(){
 
       ${state.myHostProfile ? `
         <div style="display:flex; justify-content:space-between; align-items:baseline; margin:32px 0 12px;">
-          <h3 style="font-family:'Fraunces',serif; font-size:22px; font-weight:700;">🎙 Як ведучий</h3>
+          <h3 style="font-family:var(--font-display); font-size:22px; font-weight:700;">🎙 Як ведучий</h3>
           <span style="font-size:13px; color:var(--ink-dim);">${Object.keys(state.myHostProfile.achievements||{}).length} / ${HOST_ACHIEVEMENTS.length}</span>
         </div>
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(90px,1fr)); gap:10px; margin-bottom:16px;">
@@ -3091,7 +3098,7 @@ function viewStats(){
         <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:10px;">
           ${HOST_ACHIEVEMENTS.map(a => {
             const got = !!(state.myHostProfile.achievements||{})[a.id];
-            return `<div class="card" style="padding:14px; ${got ? 'border-color:rgba(240,180,41,0.45);' : 'opacity:0.45;'}">
+            return `<div class="card" style="padding:14px; ${got ? 'border-color:var(--gold-a45);' : 'opacity:0.45;'}">
               <div style="font-size:26px; margin-bottom:6px; ${got ? '' : 'filter:grayscale(1);'}">${a.emoji}</div>
               <div style="font-weight:700; font-size:14px; ${got ? 'color:var(--gold);' : ''}">${esc(a.name)}</div>
               <div style="font-size:11px; color:var(--ink-dim); margin-top:2px; line-height:1.35;">${esc(a.desc)}</div>
@@ -3101,7 +3108,7 @@ function viewStats(){
       ` : ''}
 
       <div class="card" style="margin-top:24px;">
-        <div style="font-family:'Fraunces',serif; font-weight:700; font-size:18px; margin-bottom:6px;">🔗 Обʼєднати статистику</div>
+        <div style="font-family:var(--font-display); font-weight:700; font-size:18px; margin-bottom:6px;">🔗 Обʼєднати статистику</div>
         <div style="font-size:13px; color:var(--ink-dim); line-height:1.5; margin-bottom:12px;">
           Грав з іншого пристрою чи браузера? Створи код тут, потім введи його на другому пристрої — статистика складеться разом.
         </div>
@@ -3109,7 +3116,7 @@ function viewStats(){
         ${state.mergeCode ? `
           <div style="background:var(--soft); border-radius:10px; padding:12px; text-align:center; margin-bottom:12px;">
             <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.1em;">ТВІЙ КОД</div>
-            <div style="font-family:'Fraunces',serif; font-weight:900; font-size:30px; color:var(--gold); letter-spacing:0.1em;">${esc(state.mergeCode)}</div>
+            <div style="font-family:var(--font-display); font-weight:900; font-size:30px; color:var(--gold); letter-spacing:0.1em;">${esc(state.mergeCode)}</div>
             <div style="font-size:12px; color:var(--ink-dim); margin-top:4px;">Введи його на іншому пристрої</div>
           </div>
         ` : `
@@ -3151,7 +3158,7 @@ function viewFinalBidEditModal(){
         <div class="modal-title">Змінити ставку</div>
         <div class="modal-subtitle">${av(info.avatar)} ${esc(info.name)} · максимум ${max}</div>
         <input type="number" class="input" id="edit-bid-input" min="0" max="${max}" value="${cur}"
-          style="font-family:'Fraunces',serif; font-size:24px; font-weight:700; color:var(--gold); margin-top:16px;">
+          style="font-family:var(--font-display); font-size:24px; font-weight:700; color:var(--gold); margin-top:16px;">
         <div id="edit-bid-err" style="display:none; color:var(--accent); font-size:12px; margin-top:8px;"></div>
         <div class="modal-actions" style="flex-direction:column; gap:8px;">
           <button class="btn btn-gold btn-full" data-action="save-final-bid-edit">${icon('check',16)} Зберегти</button>
@@ -3262,7 +3269,7 @@ function viewRanking(){
     <button class="back-btn" data-action="close-ranking">${icon('arrowLeft',16)} Назад</button>
     <div class="container slide-up">
       <div class="eyebrow">ЗАГАЛЬНИЙ РЕЙТИНГ</div>
-      <h2 style="font-family:'Fraunces',serif; font-size:36px; font-weight:700; margin:8px 0 4px;">Таблиця гравців</h2>
+      <h2 style="font-family:var(--font-display); font-size:36px; font-weight:700; margin:8px 0 4px;">Таблиця гравців</h2>
       <p style="color:var(--ink-dim); margin-bottom:24px; font-size:13px;">Сортування за перемогами, потім за рекордом.</p>
 
       ${rows === null ? `
@@ -3278,7 +3285,7 @@ function viewRanking(){
             const acc = (p.correct + p.wrong) > 0 ? Math.round((p.correct / (p.correct + p.wrong)) * 100) : 0;
             const me = p.uid === state.myId;
             const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
-            return `<div class="final-row ${i===0?'first':''}" style="${me ? 'background:rgba(240,180,41,0.08); border-radius:8px;' : ''}">
+            return `<div class="final-row ${i===0?'first':''}" style="${me ? 'background:var(--gold-a08); border-radius:8px;' : ''}">
               <div class="rank">${medal || (i+1)}</div>
               <span style="font-size:22px;">${av(p.avatar)}</span>
               <div class="name">
@@ -3308,7 +3315,7 @@ function viewChangelogModal(){
           ${CHANGELOG.map((entry, i) => `
             <div style="margin-bottom: 20px;">
               <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-                <span style="font-family:'Fraunces',serif; font-weight:900; font-size:18px; color:${i===0?'var(--gold)':'var(--ink)'};">v${entry.v}</span>
+                <span style="font-family:var(--font-display); font-weight:900; font-size:18px; color:${i===0?'var(--gold)':'var(--ink)'};">v${entry.v}</span>
                 ${i===0 ? `<span style="background:var(--gold); color:var(--bg); font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px; letter-spacing:0.05em;">ОСТАННЯ</span>` : ''}
                 <span style="font-size:12px; color:var(--ink-faint);">${entry.date}</span>
               </div>
@@ -3334,22 +3341,22 @@ function viewFormatHelpModal(){
         <div class="modal-subtitle">Інструкція + приклади</div>
 
         <div style="margin-top: 16px;">
-          <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">1. Структура файлу</div>
+          <div style="font-family:var(--font-display); font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">1. Структура файлу</div>
           <div style="font-size:14px; line-height:1.6; color:var(--ink-dim); margin-bottom:16px;">
             Файл має містити <b style="color:var(--ink);">6 категорій × 5 питань</b> = 30 питань на раунд.
             Якщо граєш 2 чи 3 раунди — для кожного раунду окремий файл.
           </div>
 
-          <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">2. Назва категорії</div>
-          <div style="background:var(--soft); padding:10px 14px; border-radius:8px; font-family:ui-monospace,monospace; font-size:13px; margin-bottom:8px;">
+          <div style="font-family:var(--font-display); font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">2. Назва категорії</div>
+          <div style="background:var(--soft); padding:10px 14px; border-radius:8px; font-family:var(--font-mono); font-size:13px; margin-bottom:8px;">
 # Кіно
           </div>
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:16px;">
             Починається з <code style="background:var(--soft); padding:1px 5px; border-radius:3px;">#</code> + пробіл + назва.
           </div>
 
-          <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">3. Питання</div>
-          <div style="background:var(--soft); padding:10px 14px; border-radius:8px; font-family:ui-monospace,monospace; font-size:13px; margin-bottom:8px; white-space:pre-wrap;">200 | У якій країні зняли «Паразити»? | Південна Корея
+          <div style="font-family:var(--font-display); font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">3. Питання</div>
+          <div style="background:var(--soft); padding:10px 14px; border-radius:8px; font-family:var(--font-mono); font-size:13px; margin-bottom:8px; white-space:pre-wrap;">200 | У якій країні зняли «Паразити»? | Південна Корея
 400 | Хто зіграв Нео? | Кіану Рівз</div>
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:16px;">
             Формат: <b style="color:var(--ink);">ВАРТІСТЬ | ПИТАННЯ | ВІДПОВІДЬ</b>.
@@ -3364,24 +3371,24 @@ function viewFormatHelpModal(){
             <br><br>
             <b style="color:var(--ink);">Аудіо:</b> прикріплюється кнопкою біля питання вже після завантаження пака.
           </div>
-          <div style="background:var(--soft); padding:10px 14px; border-radius:8px; font-family:ui-monospace,monospace; font-size:13px; margin-bottom:16px; white-space:pre-wrap;">600 | Назви три кольори:\\nЧервоний\\nЗелений\\nСиній | будь-що
+          <div style="background:var(--soft); padding:10px 14px; border-radius:8px; font-family:var(--font-mono); font-size:13px; margin-bottom:16px; white-space:pre-wrap;">600 | Назви три кольори:\\nЧервоний\\nЗелений\\nСиній | будь-що
 400 | Столиця Австралії? | Канберра // не Сідней, як часто думають
 800 | Що це за пісня? [yt:https://youtu.be/dQw4w9WgXcQ 15-40] | Never Gonna Give You Up</div>
 
-          <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">4. Картинки (тільки .docx)</div>
+          <div style="font-family:var(--font-display); font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">4. Картинки (тільки .docx)</div>
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:8px; line-height:1.6;">
             <b style="color:var(--ink);">📷 Картинка-питання:</b> вставляй картинку прямо В РЯДОК питання (у тому ж абзаці що й текст рядка).
             <br>
             <b style="color:var(--ink);">📷 Картинка-відповідь:</b> вставляй картинку в НАСТУПНИЙ абзац після рядка питання (окремим абзацом).
           </div>
-          <div style="background:var(--soft); padding:10px 14px; border-radius:8px; font-family:ui-monospace,monospace; font-size:12px; margin-bottom:16px; line-height:1.7;">
+          <div style="background:var(--soft); padding:10px 14px; border-radius:8px; font-family:var(--font-mono); font-size:12px; margin-bottom:16px; line-height:1.7;">
 200 |  | Кіану Рівз 📷 ← картинка тут = ПИТАННЯ
 <br>
 400 | Прапор якої країни? | Японія
 <br>📷 ← окремий абзац = ВІДПОВІДЬ
           </div>
 
-          <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">5. Особливі випадки</div>
+          <div style="font-family:var(--font-display); font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">5. Особливі випадки</div>
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:16px; line-height:1.7;">
             • Якщо питання — тільки картинка (без тексту), лиши поле порожнім: <code>200 | | відповідь</code>
             <br>• Якщо відповідь — тільки картинка, лиши порожнім: <code>200 | питання | </code> + картинка нижче
@@ -3389,7 +3396,7 @@ function viewFormatHelpModal(){
             <br>• Можеш лишати порожні рядки між категоріями для зручності
           </div>
 
-          <div style="font-family:'Fraunces',serif; font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">6. Скачай готовий шаблон</div>
+          <div style="font-family:var(--font-display); font-weight:700; font-size:16px; color:var(--gold); margin-bottom:8px;">6. Скачай готовий шаблон</div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <a class="btn btn-gold btn-sm" href="template.docx" download="template.docx" style="text-decoration:none; flex:1; min-width:140px;">
               ${icon('upload',14)} template.docx
@@ -3439,13 +3446,13 @@ function viewScoreEditModal(){
         <div style="margin-top:16px;">
           <div style="font-size:12px; color:var(--ink-dim); margin-bottom:4px;">Точне значення:</div>
           <div style="display:flex; gap:8px;">
-            <input type="number" class="input" id="score-edit-input" value="${esc(inputVal)}" style="font-family:'Fraunces',serif; font-size:20px; font-weight:700; padding:6px 0;">
+            <input type="number" class="input" id="score-edit-input" value="${esc(inputVal)}" style="font-family:var(--font-display); font-size:20px; font-weight:700; padding:6px 0;">
             <button class="btn btn-gold btn-sm" data-action="score-set-exact" style="white-space:nowrap;">Встановити</button>
           </div>
         </div>
 
         <div class="modal-actions" style="flex-direction:column; gap:8px;">
-          <button class="btn btn-ghost btn-full" data-action="kick-player" data-player="${state.editingScorePlayerId}" style="color:var(--accent); border-color:rgba(232,74,48,0.3);">${icon('x',16)} Видалити гравця з гри</button>
+          <button class="btn btn-ghost btn-full" data-action="kick-player" data-player="${state.editingScorePlayerId}" style="color:var(--accent); border-color:var(--accent-a40);">${icon('x',16)} Видалити гравця з гри</button>
           <button class="btn btn-ghost btn-full" data-action="close-score-edit">Закрити</button>
         </div>
       </div>

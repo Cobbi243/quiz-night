@@ -19,6 +19,34 @@
   --line: rgba(250, 246, 239, 0.12);
   --soft: rgba(250, 246, 239, 0.06); --soft-hover: rgba(250, 246, 239, 0.1);
   --stage: linear-gradient(180deg, #1a1825 0%, #0f0e17 100%);
+
+  /* Typography — change these to restyle the whole app */
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Spacing scale */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 24px; --sp-6: 32px; --sp-7: 48px;
+
+  /* Corner radii */
+  --r-sm: 8px; --r-md: 12px; --r-lg: 18px; --r-xl: 24px; --r-pill: 999px;
+
+  /* Elevation */
+  --shadow-soft: 0 2px 6px rgba(0,0,0,0.25);
+  --shadow-card: 0 8px 20px rgba(0,0,0,0.3);
+  --shadow-stage: 0 24px 48px rgba(0,0,0,0.4);
+
+  /* Tinted surfaces built from the accent colours */
+  --gold-a08: rgba(240,180,41,0.08);
+  --gold-a12: rgba(240,180,41,0.12);
+  --gold-a25: rgba(240,180,41,0.25);
+  --gold-a45: rgba(240,180,41,0.45);
+  --accent-a15: rgba(232,74,48,0.15);
+  --accent-a40: rgba(232,74,48,0.40);
+  --green-a08: rgba(74,222,128,0.08);
+  --green-a30: rgba(74,222,128,0.30);
+  --green-a50: rgba(74,222,128,0.50);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
@@ -28,7 +56,7 @@ html, body {
     radial-gradient(900px 500px at 10% 105%, rgba(232,74,48,0.05), transparent 55%);
   background-attachment: fixed;
   color: var(--ink);
-  font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+  font-family: var(--font-body);
   min-height: 100vh; -webkit-font-smoothing: antialiased;
 }
 .grain {
@@ -48,7 +76,7 @@ html, body {
 .center-screen { min-height: calc(100vh - 48px); display: flex; flex-direction: column; align-items: center; justify-content: center; }
 
 .btn {
-  font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+  font-family: var(--font-body);
   font-weight: 500; padding: 12px 24px; font-size: 16px;
   border: none; border-radius: 12px; cursor: pointer;
   transition: all 0.15s ease; display: inline-flex; align-items: center;
@@ -77,14 +105,14 @@ html, body {
 .input {
   width: 100%; background: transparent; border: none;
   border-bottom: 1px solid var(--line); padding: 12px 0;
-  font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+  font-family: var(--font-body);
   font-size: 18px; color: var(--ink); outline: none;
   transition: border-color 0.15s;
 }
 .input:focus { border-bottom-color: var(--accent); }
 .input::placeholder { color: var(--ink-faint); }
 .input-code {
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: var(--font-display);
   font-size: 64px; font-weight: 700;
   letter-spacing: 0.3em; text-align: center; text-transform: uppercase;
 }
@@ -111,7 +139,7 @@ html, body {
   margin-bottom: 12px; text-transform: uppercase; font-weight: 700;
 }
 .hero-title {
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: var(--font-display);
   font-weight: 900; font-size: clamp(56px, 11vw, 112px);
   line-height: 0.85; text-align: center;
 }
@@ -132,7 +160,7 @@ html, body {
 }
 .code-value {
   background: none; border: none; cursor: pointer;
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: var(--font-display);
   font-size: 36px; font-weight: 700; color: var(--gold);
   letter-spacing: 0.2em; display: flex; align-items: center; gap: 8px; padding: 0;
 }
@@ -190,17 +218,23 @@ html, body {
 .board { display: grid; gap: 8px; grid-template-columns: repeat(6, 1fr); grid-template-rows: auto repeat(5, minmax(80px, 1fr)); }
 .board-header {
   background: linear-gradient(180deg, #2a253d 0%, #1d1a2c 100%);
-  border-radius: 12px; padding: 12px 8px;
+  border-radius: 12px; padding: 10px 6px;
   display: flex; align-items: center; justify-content: center;
-  text-align: center; min-height: 64px;
+  text-align: center;
+  min-height: 64px; max-height: 96px;      /* long names can't stretch the row */
+  overflow: hidden; min-width: 0;
   border: 1px solid rgba(240,180,41,0.12);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
 }
 .board-header .cat-name {
-  font-family: 'Fraunces', Georgia, serif;
-  font-weight: 700; font-size: clamp(10px, 1.2vw, 14px);
-  text-transform: uppercase; letter-spacing: 0.03em;
-  color: var(--gold); line-height: 1.1;
+  font-family: var(--font-display);
+  font-weight: 700; font-size: clamp(9px, 1.15vw, 14px);
+  text-transform: uppercase; letter-spacing: 0.02em;
+  color: var(--gold); line-height: 1.15;
+  width: 100%; min-width: 0;
+  overflow: hidden; overflow-wrap: anywhere; hyphens: auto;
+  /* Cut off after five lines with an ellipsis rather than pushing the board down */
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5;
 }
 .board-cell {
   position: relative;
@@ -208,7 +242,7 @@ html, body {
   border-radius: 12px; cursor: pointer;
   border: 1px solid rgba(255,255,255,0.05);
   display: flex; align-items: center; justify-content: center;
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: var(--font-display);
   font-weight: 900; font-size: clamp(20px, 2.6vw, 36px);
   color: var(--gold);
   transition: transform 0.14s ease, box-shadow 0.14s ease, background 0.14s ease, border-color 0.14s ease;
@@ -253,7 +287,7 @@ html, body {
 .player-chip-top { display: flex; align-items: center; gap: 8px; }
 .player-chip-name { font-weight: 600; font-size: 13px; flex: 1; min-width: 0; }
 .player-chip-score {
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: var(--font-display);
   font-weight: 900; font-size: 24px;
   color: var(--gold); margin-top: 4px;
 }
@@ -325,7 +359,7 @@ html, body {
 .qs-body-inner .qs-question-text { flex: 0 1 auto; min-height: 0; }
 /* Auto-sizing question text: scales with viewport, smaller floor so long text fits */
 .qs-question-text {
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: var(--font-display);
   font-weight: 700; line-height: 1.15;
   max-width: 900px; white-space: pre-wrap;
   font-size: clamp(20px, 3.2vw, 42px);
@@ -343,11 +377,11 @@ html, body {
 
 .q-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; font-size: 14px; }
 .q-cat { text-transform: uppercase; letter-spacing: 0.15em; color: var(--gold); font-weight: 700; }
-.q-value { font-family: 'Fraunces', Georgia, serif; font-weight: 900; font-size: 32px; color: var(--gold); }
+.q-value { font-family: var(--font-display); font-weight: 900; font-size: 32px; color: var(--gold); }
 .q-text { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px 0; flex-direction: column; gap: 16px; }
 .q-image { max-width: 100%; max-height: 60vh; height: auto; border-radius: 12px; object-fit: contain; }
 .q-text-inner {
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: var(--font-display);
   font-weight: 700; font-size: clamp(24px, 4vw, 44px);
   line-height: 1.2; max-width: 900px;
   white-space: pre-wrap;
@@ -359,7 +393,7 @@ html, body {
   border-radius: 12px; text-align: center; color: var(--green);
 }
 .q-answer-reveal-label { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; opacity: 0.7; margin-bottom: 4px; }
-.q-answer-reveal-text { font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 22px; white-space: pre-wrap; }
+.q-answer-reveal-text { font-family: var(--font-display); font-weight: 700; font-size: 22px; white-space: pre-wrap; }
 
 .buzz-btn {
   background: var(--accent); color: var(--ink);
@@ -393,7 +427,7 @@ html, body {
 
 .buzzed-banner { background: var(--gold); color: var(--bg); border-radius: 16px; padding: 20px 24px; text-align: center; }
 .buzzed-banner-label { font-size: 12px; letter-spacing: 0.15em; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
-.buzzed-banner-name { font-family: 'Fraunces', Georgia, serif; font-weight: 900; font-size: 32px; }
+.buzzed-banner-name { font-family: var(--font-display); font-weight: 900; font-size: 32px; }
 
 .host-controls { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 16px; }
 .host-controls .btn { flex: 1; min-width: 140px; }
@@ -402,7 +436,7 @@ html, body {
 
 /* SETUP */
 .cat-input-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-.cat-input-row .num { font-family: 'Fraunces', Georgia, serif; font-weight: 700; color: var(--gold); width: 24px; text-align: center; }
+.cat-input-row .num { font-family: var(--font-display); font-weight: 700; color: var(--gold); width: 24px; text-align: center; }
 .cat-input-row input { flex: 1; }
 
 .q-builder-card { background: var(--soft); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
@@ -410,7 +444,7 @@ html, body {
 .q-builder-question .value-pill {
   background: var(--gold); color: var(--bg);
   border-radius: 6px; padding: 4px 8px;
-  font-family: 'Fraunces', Georgia, serif; font-weight: 700;
+  font-family: var(--font-display); font-weight: 700;
   font-size: 12px; flex-shrink: 0; min-width: 36px; text-align: center;
 }
 .q-builder-question .q-text-input, .q-builder-question .a-text-input {
@@ -440,7 +474,7 @@ html, body {
 
 .parsed-preview { max-height: 360px; overflow-y: auto; }
 .parsed-cat { margin-bottom: 16px; }
-.parsed-cat-name { font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 18px; color: var(--gold); margin-bottom: 8px; }
+.parsed-cat-name { font-family: var(--font-display); font-weight: 700; font-size: 18px; color: var(--gold); margin-bottom: 8px; }
 .parsed-q { padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
 .parsed-q .v { color: var(--gold); font-weight: 700; }
 .parsed-q .a { color: var(--green); font-size: 12px; margin-top: 2px; }
@@ -468,13 +502,13 @@ html, body {
   border-radius: 24px; padding: 32px 48px;
 }
 .winner-emoji { font-size: 72px; margin-bottom: 8px; }
-.winner-name { font-family: 'Fraunces', Georgia, serif; font-size: 40px; font-weight: 900; }
+.winner-name { font-family: var(--font-display); font-size: 40px; font-weight: 900; }
 .winner-score { font-size: 14px; opacity: 0.7; margin-top: 4px; font-weight: 700; }
 .final-row { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 12px; background: var(--soft); margin-bottom: 8px; }
 .final-row.first { background: rgba(240, 180, 41, 0.15); border: 1px solid rgba(240,180,41,0.4); }
-.final-row .rank { font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 24px; color: var(--ink-faint); width: 32px; }
+.final-row .rank { font-family: var(--font-display); font-weight: 700; font-size: 24px; color: var(--ink-faint); width: 32px; }
 .final-row .name { flex: 1; font-weight: 500; }
-.final-row .pts { font-family: 'Fraunces', Georgia, serif; font-weight: 900; font-size: 22px; color: var(--gold); }
+.final-row .pts { font-family: var(--font-display); font-weight: 900; font-size: 22px; color: var(--gold); }
 .final-row .pts.negative { color: var(--accent); }
 
 /* SETUP WARNING */
@@ -519,14 +553,14 @@ html, body {
   animation: slideUp 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .modal-title {
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: var(--font-display);
   font-weight: 700; font-size: 22px; margin-bottom: 4px;
 }
 .modal-subtitle {
   font-size: 13px; color: var(--ink-dim); margin-bottom: 20px;
 }
 .modal-score {
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: var(--font-display);
   font-weight: 900; font-size: 56px;
   color: var(--gold); text-align: center;
   margin: 16px 0;
@@ -539,7 +573,7 @@ html, body {
 .score-btn {
   background: var(--soft); color: var(--ink);
   border: none; border-radius: 10px; padding: 12px 4px;
-  font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+  font-family: var(--font-body);
   font-weight: 700; font-size: 14px;
   cursor: pointer; transition: all 0.15s;
 }
@@ -564,7 +598,7 @@ html, body {
   margin-bottom: 6px;
   text-align: center;
 }
-.timer-bar-label b { color: var(--ink); font-size: 16px; font-family: 'Fraunces', Georgia, serif; }
+.timer-bar-label b { color: var(--ink); font-size: 16px; font-family: var(--font-display); }
 .timer-bar-track {
   height: 6px;
   background: rgba(250, 246, 239, 0.08);
@@ -581,7 +615,7 @@ html, body {
 .timer-chip {
   background: var(--soft); color: var(--ink);
   border: 1px solid var(--line); border-radius: 10px;
-  padding: 8px 16px; font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+  padding: 8px 16px; font-family: var(--font-body);
   font-weight: 600; font-size: 14px; cursor: pointer;
   transition: all 0.15s; min-width: 56px;
 }
@@ -799,7 +833,7 @@ html, body {
   min-width: 0; overflow: hidden;
 }
 .stat-value {
-  font-family: 'Fraunces', Georgia, serif;
+  font-family: var(--font-display);
   font-weight: 900; line-height: 1.05;
   font-size: clamp(15px, 4.2vw, 28px);
   overflow-wrap: anywhere;
@@ -863,7 +897,7 @@ html, body {
   background: var(--soft);
   border: 1px solid var(--line);
   color: var(--ink-dim);
-  font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+  font-family: var(--font-body);
   font-size: 12px; font-weight: 600;
   padding: 5px 12px;
   border-radius: 999px;
@@ -889,6 +923,6 @@ html, body {
 </div>
 <div id="overlay-root"></div>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script type="module" src="app.js?v=202608091700"></script>
+<script type="module" src="app.js?v=202609121200"></script>
 </body>
 </html>
