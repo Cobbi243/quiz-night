@@ -89,8 +89,11 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '3.01';
+const APP_VERSION = '3.02';
 const CHANGELOG = [
+  { v: '3.02', date: '17.09.2026', changes: [
+    'Плитки статистики розтягуються під розмір числа — воно більше не переноситься',
+  ]},
   { v: '3.01', date: '17.09.2026', changes: [
     'Темніша палітра — фон і сукно стали глибшими',
     'Виправлено підказку з відповіддю для ведучого — тепер її видно',
@@ -3089,7 +3092,7 @@ function viewStats(){
       </p>
 
       ${prof ? `
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(90px,1fr)); gap:10px; margin-bottom:24px;">
+        <div class="stat-row" style="margin-bottom:24px;">
           ${stat('ПЕРЕМОГ', prof.wins || 0)}
           ${stat('ІГОР', prof.games || 0, 'var(--ink)')}
           ${stat('ТОЧНІСТЬ', acc + '%', acc >= 60 ? 'var(--green)' : 'var(--accent)')}
@@ -3115,14 +3118,14 @@ function viewStats(){
           return `
             ${anyRound ? `
               <div style="font-size:13px; color:var(--ink-dim); margin:8px 0 10px;">Середні бали за раунд</div>
-              <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(90px,1fr)); gap:10px; margin-bottom:20px;">
+              <div class="stat-row" style="margin-bottom:20px;">
                 ${r1 != null ? stat('РАУНД 1', r1, r1 < 0 ? 'var(--accent)' : 'var(--gold)') : ''}
                 ${r2 != null ? stat('РАУНД 2', r2, r2 < 0 ? 'var(--accent)' : 'var(--gold)') : ''}
                 ${r3 != null ? stat('РАУНД 3', r3, r3 < 0 ? 'var(--accent)' : 'var(--gold)') : ''}
               </div>
             ` : ''}
             <div style="font-size:13px; color:var(--ink-dim); margin:8px 0 10px;">Рекорди</div>
-            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(90px,1fr)); gap:10px; margin-bottom:12px;">
+            <div class="stat-row" style="margin-bottom:12px;">
               ${stat('РЕКОРД ЗА ГРУ', prof.bestScore || 0, 'var(--green)')}
               ${worst != null ? stat('АНТИРЕКОРД', worst, 'var(--accent)') : ''}
               ${finAcc != null ? stat('ФІНАЛИ ВГАДАНО', finAcc + '%', finAcc >= 50 ? 'var(--green)' : 'var(--accent)') : ''}
@@ -3152,7 +3155,7 @@ function viewStats(){
           <h3 style="font-family:var(--font-display); font-size:22px; font-weight:700;">🎙 Як ведучий</h3>
           <span style="font-size:13px; color:var(--ink-dim);">${Object.keys(state.myHostProfile.achievements||{}).length} / ${HOST_ACHIEVEMENTS.length}</span>
         </div>
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(90px,1fr)); gap:10px; margin-bottom:16px;">
+        <div class="stat-row" style="margin-bottom:16px;">
           ${stat('ПРОВЕДЕНО', state.myHostProfile.gamesHosted || 0)}
           ${stat('ПИТАНЬ', state.myHostProfile.questionsAsked || 0, 'var(--ink)')}
           ${stat('МАКС ГРАВЦІВ', state.myHostProfile.maxPlayers || 0, 'var(--ink)')}

@@ -872,20 +872,25 @@ html, body {
 .bid-quick-row .btn { flex: 1 1 auto; min-width: 56px; }
 
 /* Stat tiles — numbers scale down instead of spilling out of the card */
+.stat-row {
+  display: flex; flex-wrap: wrap; gap: 10px;
+}
+/* Tiles grow with their number instead of wrapping it onto a second line */
+.stat-row .stat-tile { flex: 1 1 auto; min-width: 88px; }
+
 .stat-tile {
-  text-align: center; padding: 14px 6px;
-  min-width: 0; overflow: hidden;
+  text-align: center; padding: 14px 14px;
 }
 .stat-value {
   font-family: var(--font-display);
   font-weight: 900; line-height: 1.05;
   font-size: clamp(15px, 4.2vw, 28px);
-  overflow-wrap: anywhere;
+  white-space: nowrap;          /* keep numbers on one line */
 }
 .stat-label {
   font-size: 10px; color: var(--ink-dim);
   margin-top: 3px; letter-spacing: 0.04em;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 /* Uploaded avatar pictures */
@@ -1339,6 +1344,6 @@ html, body {
 </div>
 <div id="overlay-root"></div>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script type="module" src="app.js?v=202609170300"></script>
+<script type="module" src="app.js?v=202609170330"></script>
 </body>
 </html>
