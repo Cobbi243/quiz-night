@@ -89,8 +89,16 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '3.0-beta1';
+const APP_VERSION = '3.0-beta3';
 const CHANGELOG = [
+  { v: '3.0-beta3', date: '17.09.2026', changes: [
+    'Новий вигляд: світла тема, нові шрифти й оформлення дошки',
+    'Виправлено відлік базера — 1 секунда більше не показується як 3',
+  ]},
+  { v: '3.0-beta2', date: '12.09.2026', changes: [
+    'Кнопка «Почати гру» переїхала в лоббі, де видно всіх гравців',
+    'На екрані налаштувань тепер кнопка «Готово — до лоббі»',
+  ]},
   { v: '3.0-beta1', date: '12.09.2026', changes: [
     'Курсор і введені цифри більше не злітають, коли хтось інший робить ставку',
     'Пробіл більше не гортає сторінку',
@@ -1159,6 +1167,9 @@ function icon(name, size=18){
     trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
     image: '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
     eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+    audio: '<path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/>',
+    video: '<path d="M22 8l-6 4 6 4V8z"/><rect x="2" y="6" width="14" height="12" rx="3"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     send: '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
   };
@@ -1566,9 +1577,25 @@ function viewLobby(){
       ${state.isHost ? `
         ${(() => {
           const rt = state.setupRoundsTotal;
-          const collected = Object.keys(state.setupRoundPacks || {}).length;
-          const inProgress = rt && collected > 0;
-          return `<button class="btn btn-gold btn-lg btn-full" data-action="go-mode-select">${icon('play',18)} ${inProgress ? `Продовжити налаштування (${collected}/${rt} паків)` : 'Налаштувати гру та почати'}</button>`;
+          const packs = state.setupRoundPacks || {};
+          const collected = Object.keys(packs).length;
+          let ready = !!rt;
+          if (rt) for (let i = 1; i <= rt; i++) if (!packs[i]) ready = false;
+          const playersIn = playerList.filter(p => p.id !== r.hostId).length;
+          const canStart = ready && playersIn > 0;
+
+          return `
+            <button class="btn ${ready ? 'btn-ghost' : 'btn-gold'} btn-lg btn-full" data-action="go-mode-select">
+              ${icon('settings',18)} ${rt ? `Налаштування (${collected}/${rt} паків)` : 'Налаштувати гру'}
+            </button>
+            ${ready ? `
+              <button class="btn btn-accent btn-lg btn-full" data-action="start-all-rounds" ${!canStart ? 'disabled' : ''} style="margin-top:10px;">
+                ${icon('play',18)} ${canStart ? 'Почати гру' : 'Чекаємо гравців...'}
+              </button>
+            ` : `
+              <div class="info-text" style="margin-top:10px;">Заваж паки в налаштуваннях — і тут зʼявиться кнопка старту.</div>
+            `}
+          `;
         })()}
       ` : `
         <div class="card" style="text-align:center; padding:40px;">
@@ -1688,9 +1715,10 @@ function viewModeSelect(){
 
         ${state.setupErr ? `<div class="err-text" style="margin-bottom:12px;">${esc(state.setupErr)}</div>` : ''}
 
-        <button class="btn ${allRoundsReady?'btn-accent':'btn-ghost'} btn-lg btn-full" data-action="start-all-rounds" ${!allRoundsReady?'disabled':''}>
-          ${allRoundsReady ? `${icon('play',18)} Почати гру` : `Заваж паки для всіх ${rt} раундів`}
+        <button class="btn ${allRoundsReady?'btn-accent':'btn-ghost'} btn-lg btn-full" data-action="leave-mode-select">
+          ${allRoundsReady ? `${icon('check',18)} Готово — до лоббі` : `Заваж паки для всіх ${rt} раундів`}
         </button>
+        ${allRoundsReady ? `<div class="info-text" style="margin-top:12px;">Кнопка старту чекає в лоббі, де видно всіх гравців.</div>` : ''}
         ${!finalReady && allRoundsReady ? `<div class="info-text" style="margin-top:12px;">💡 Фінальне питання не задане — гра завершиться без фіналу (можна додати пізніше).</div>` : ''}
       ` : `
         <div class="info-text">Обери кількість раундів, щоб продовжити.</div>
@@ -2014,7 +2042,7 @@ function viewBoard(){
               const hasImg = q && (q.image || q.answerImage);
               const hasAud = q && q.audio;
               const hasVid = q && (q.video || q.youtube);
-              return `<button class="board-cell ${used?'used':''}" ${(used||!canPick)?'disabled':''} data-action="pick-cell" data-ci="${ci}" data-qi="${vi}">${used ? '' : cellValue}${!used && (hasImg || hasAud || hasVid) ? `<span class="cell-img-icon">${hasImg ? icon('image',12) : ''}${hasAud ? '🔊' : ''}${hasVid ? '🎬' : ''}</span>` : ''}</button>`;
+              return `<button class="board-cell ${used?'used':''}" ${(used||!canPick)?'disabled':''} data-action="pick-cell" data-ci="${ci}" data-qi="${vi}">${used ? '' : cellValue}${!used && (hasImg || hasAud || hasVid) ? `<span class="cell-media">${hasImg ? `<i class="cell-media-badge" title="Фото">${icon('image',15)}</i>` : ''}${hasAud ? `<i class="cell-media-badge" title="Аудіо">${icon('audio',15)}</i>` : ''}${hasVid ? `<i class="cell-media-badge" title="Відео">${icon('video',15)}</i>` : ''}</span>` : ''}</button>`;
             }).join('')
           ).join('')}
         </div>
@@ -2270,7 +2298,7 @@ function viewQuestion(){
   }
 
   if (r.questionState === 'countdown' && r.countdownDeadline) {
-    const sec = Math.max(0, Math.ceil((r.countdownDeadline - serverNow()) / 1000));
+    const sec = Math.max(0, Math.round((r.countdownDeadline - serverNow()) / 1000));
     controls += `<div style="text-align:center; padding:8px 0;">
       <div style="font-size:12px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">Базер відкриється через</div>
       <div id="countdown-num" style="font-family:var(--font-display); font-weight:900; font-size:56px; color:var(--gold); line-height:1;">${sec}</div>
@@ -4547,7 +4575,7 @@ async function startGame(pack){
     } else {
       patch.teamScores = null;
     }
-    patch.countdownSecondsConfig = state.setupCountdownSeconds || 5;
+    patch.countdownSecondsConfig = (typeof state.setupCountdownSeconds === 'number' && state.setupCountdownSeconds > 0) ? state.setupCountdownSeconds : 5;
   }
   await update(ref(db, `rooms/${state.code}`), patch);
   state.subScreen = null;
@@ -4625,7 +4653,7 @@ async function pickCell(ci, qi){
     patch.buzzPhaseDeadline = null;
   } else if (mode === 'countdown') {
     // Show a countdown to all players, buzzer opens automatically after it
-    const cd = r.countdownSecondsConfig || 5;
+    const cd = (typeof r.countdownSecondsConfig === 'number' && r.countdownSecondsConfig > 0) ? r.countdownSecondsConfig : 5;
     patch.questionState = 'countdown';
     patch.countdownDeadline = now + cd * 1000;
     patch.buzzPhaseDeadline = null;
@@ -6117,7 +6145,7 @@ function updateTimerOnly(){
   const now = serverNow();
   // Countdown phase: update the big number
   if (r.status === 'question' && r.questionState === 'countdown' && r.countdownDeadline) {
-    const cdSec = Math.max(0, Math.ceil((r.countdownDeadline - now) / 1000));
+    const cdSec = Math.max(0, Math.round((r.countdownDeadline - now) / 1000));
     const cdEl = document.getElementById('countdown-num');
     if (cdEl) cdEl.textContent = cdSec;
     return;
