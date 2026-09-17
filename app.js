@@ -89,8 +89,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '3.03';
+const APP_VERSION = '3.04';
 const CHANGELOG = [
+  { v: '3.04', date: '17.09.2026', changes: [
+    'Дошка й значки медіа підігнані під телефон — нічого не вилазить і не накладається',
+    'При розкритті показується лише відповідь, без повтору питання',
+  ]},
   { v: '3.03', date: '17.09.2026', changes: [
     'Кнопки «Назад», «Вийти» й «Закрити питання» більше не виглядають як текст',
   ]},
@@ -2157,7 +2161,6 @@ function viewQuestion(){
         ${q.answerImage ? `<img src="${q.answerImage}" class="q-image" style="max-height:400px; margin-bottom:8px;" alt="">` : ''}
         ${q.a && q.a.trim() ? `<div class="q-answer-reveal-text">${escMultiline(q.a)}</div>` : ''}
         ${q.explanation && q.explanation.trim() ? `<div style="margin-top:10px; font-size:16px; font-weight:500; color:var(--green); opacity:0.85; white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
-        ${(q.q && q.q.trim()) ? `<div style="margin-top:16px; font-size:13px; color:var(--ink-dim); white-space:pre-wrap;">Питання: ${escMultiline(q.q)}</div>` : ''}
       </div>`;
   } else {
     stageBody = `

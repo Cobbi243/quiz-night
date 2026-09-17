@@ -282,7 +282,7 @@ html, body {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 5;
 }
 .board-cell {
-  position: relative;
+  position: relative; overflow: hidden;
   background: #3d4927;
   border-radius: 20px; cursor: pointer;
   border: none;
@@ -761,12 +761,17 @@ html, body {
 /* ===== RESPONSIVE LAYOUT ===== */
 /* Phones */
 @media (max-width: 640px) {
-  .container, .container-lg { padding-left: 14px; padding-right: 14px; }
-  .board { gap: 5px; grid-template-rows: auto repeat(5, minmax(56px, 1fr)); }
-  .board-wrap { padding: 10px; border-radius: var(--r-lg); }
-  .board-cell { font-size: clamp(15px, 5vw, 24px); border-radius: var(--r-sm); }
-  .board-header { min-height: 46px; max-height: 66px; padding: 6px 4px; }
-  .board-header .cat-name { font-size: clamp(8px, 2.6vw, 11px); -webkit-line-clamp: 4; }
+  .container, .container-lg { padding-left: 10px; padding-right: 10px; }
+  .board { gap: 4px; grid-template-rows: auto repeat(5, minmax(52px, 1fr)); }
+  .board-wrap { padding: 8px; border-radius: var(--r-lg); }
+  .board-cell { font-size: clamp(13px, 4.4vw, 20px); border-radius: var(--r-sm); padding: 4px; }
+  .board-header { min-height: 54px; max-height: 84px; padding: 5px 3px; }
+  .board-header .cat-name { font-size: clamp(7px, 2.3vw, 10px); -webkit-line-clamp: 5; letter-spacing: 0; }
+
+  /* Badges must not cover the value on a narrow cell */
+  .cell-media { top: 3px; left: 3px; gap: 2px; }
+  .cell-media-badge { width: 15px; height: 15px; border-radius: 5px; box-shadow: none; }
+  .cell-media-badge svg { width: 10px; height: 10px; stroke-width: 3; }
   .q-value { font-size: 24px; }
   .buzz-btn { padding: 18px 24px; font-size: 18px; }
   .player-bar { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
@@ -1349,8 +1354,9 @@ html, body {
 }
 /* ---- Media markers on board cells: cream badges that read from across the room ---- */
 .cell-media {
-  position: absolute; top: 7px; left: 7px; right: auto;
+  position: absolute; top: 7px; left: 7px; right: 7px;
   display: flex; gap: 4px; pointer-events: none; line-height: 0;
+  flex-wrap: nowrap; overflow: hidden;
 }
 .cell-media-badge {
   width: 26px; height: 26px; border-radius: 9px;
@@ -1388,6 +1394,6 @@ html, body {
 </div>
 <div id="overlay-root"></div>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script type="module" src="app.js?v=202609170400"></script>
+<script type="module" src="app.js?v=202609170500"></script>
 </body>
 </html>
