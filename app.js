@@ -89,8 +89,47 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '2.45';
+const APP_VERSION = '3.01';
 const CHANGELOG = [
+  { v: '3.01', date: '17.09.2026', changes: [
+    'Темніша палітра — фон і сукно стали глибшими',
+    'Виправлено підказку з відповіддю для ведучого — тепер її видно',
+  ]},
+  { v: '3.0', date: '17.09.2026', changes: [
+    '━━━ ОФОРМЛЕННЯ ━━━',
+    '🎨 Повністю новий вигляд: світла тема, нові шрифти, оформлена дошка й сцена питання.',
+    '📐 Адаптація під телефон, планшет і широкий монітор — верстка підлаштовується сама.',
+    '🏷 На клітинках видно значки того, що всередині: фото, звук чи відео.',
+    '━━━ ІГРОВИЙ ПРОЦЕС ━━━',
+    '🎲 «Своя гра» перероблена: ставку вносить лише ведучий з голосу гравця, далі йде звичайний час на роздуми, а ведучий одразу отримує кнопки оцінки.',
+    '▶️ Кнопка «Почати гру» переїхала в лоббі, де видно всіх учасників. Можна стартувати й наодинці, щоб перевірити пак.',
+    '⏱ У фіналі під час ставок немає таймера — часу на роздуми скільки завгодно.',
+    '💰 Швидкі ставки у фіналі: 0, ¼, ½ і «ВСЕ».',
+    '✏️ Ведучий може виправити ставку, яку гравець назвав помилково.',
+    '━━━ СТАТИСТИКА ━━━',
+    '🔗 Обʼєднання статистики з різних пристроїв за кодом.',
+    '🏆 Нові досягнення: за аудіо- й відеопитання, 500 правильних, 30 за гру, і за загальні бали.',
+    '📊 Середні бали за кожен раунд, точність у фіналах, рекорд і антирекорд.',
+    '🧪 Тестова гра — результати не потрапляють у статистику.',
+    '━━━ ВИПРАВЛЕННЯ ━━━',
+    'Курсор і введені цифри більше не злітають, коли хтось інший робить ставку.',
+    'Пробіл більше не гортає сторінку вниз.',
+    'Список питань не перемотується вгору після прикріплення аудіо чи відео.',
+    'Відлік базера показує правильне число — одна секунда більше не виглядає як три.',
+    'Працює нагорода «Ва-банк».',
+    'Базер спрацьовує з першого дотику на iPhone.',
+    'Гравця більше не плутає з командою у фіналі.',
+    'Довгі назви категорій не розтягують дошку.',
+    'Цифри в статистиці не вилазять за рамки.',
+    'Аудіо та відео не переривається, коли хтось натискає базер.',
+    'Гучність аудіопитань за замовчуванням 50%.',
+  ]},
+  { v: '2.46', date: '12.09.2026', changes: [
+    '«Своя гра»: ставку тепер вносить лише ведучий — гравець просто називає суму вголос',
+    'Після ставки одразу йде звичайний час на роздуми, без кнопки «Готовий відповідати»',
+    'Нарешті працює нагорода «Ва-банк»',
+    'Список питань більше не перемотується вгору після прикріплення медіа',
+  ]},
   { v: '2.45', date: '12.09.2026', changes: [
     'Технічне: шрифти, відступи, заокруглення й тіні винесені в змінні',
     'Тепер вигляд можна міняти, правлячи лише значення на початку index.html',
@@ -1145,6 +1184,9 @@ function icon(name, size=18){
     trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
     image: '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
     eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+    audio: '<path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/>',
+    video: '<path d="M22 8l-6 4 6 4V8z"/><rect x="2" y="6" width="14" height="12" rx="3"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
     chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     send: '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
   };
@@ -1218,13 +1260,16 @@ function render(force){
   // render is scheduled; the newest state will be drawn once typing settles.
   if (!force) {
     const a = document.activeElement;
-    const typing = a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && a.id !== 'score-edit-input';
+    const isField = a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable);
+    const kind = (a && a.type) ? String(a.type).toLowerCase() : '';
+    // Sliders and buttons aren't typing; everything else with focus is.
+    const typing = isField && !['range','checkbox','radio','button','submit'].includes(kind);
     if (typing) {
       if (state._pendingRenderTimer) clearTimeout(state._pendingRenderTimer);
       state._pendingRenderTimer = setTimeout(() => {
         state._pendingRenderTimer = null;
         render(true);
-      }, 1200);
+      }, 2500);
       // Still update the hash so we don't lose the change
       state.lastRenderHash = newHash;
       return;
@@ -1318,7 +1363,10 @@ function render(force){
     if (nextFinal && nextFinal.getAttribute('data-final-key') === liveFinal.getAttribute('data-final-key')) {
       const a = liveFinal.querySelector('[data-final-list]');
       const b = nextFinal.querySelector('[data-final-list]');
-      if (a && b && a.innerHTML !== b.innerHTML) a.innerHTML = b.innerHTML;
+      const focused = document.activeElement;
+      const typingInside = a && focused && a.contains(focused)
+        && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA');
+      if (a && b && !typingInside && a.innerHTML !== b.innerHTML) a.innerHTML = b.innerHTML;
       attachListeners();
       return;
     }
@@ -1345,13 +1393,25 @@ function render(force){
   }
 
   const keepScroll = window.scrollY || document.documentElement.scrollTop || 0;
+  // Inner panes (like the pack preview) scroll independently of the window
+  const innerScrolls = {};
+  ['.parsed-preview', '.chat-messages'].forEach(sel => {
+    const node = appEl.querySelector(sel);
+    if (node && node.scrollTop > 0) innerScrolls[sel] = node.scrollTop;
+  });
+
   appEl.innerHTML = html;
   attachListeners();
-  if (keepScroll > 0) {
-    // Restore after layout so the browser doesn't clamp it to 0
-    window.scrollTo(0, keepScroll);
-    requestAnimationFrame(() => window.scrollTo(0, keepScroll));
-  }
+
+  const restore = () => {
+    if (keepScroll > 0) window.scrollTo(0, keepScroll);
+    Object.entries(innerScrolls).forEach(([sel, top]) => {
+      const node = appEl.querySelector(sel);
+      if (node) node.scrollTop = top;
+    });
+  };
+  restore();
+  requestAnimationFrame(restore);
 
 
   // While chat is open, mark all current messages as seen
@@ -1534,9 +1594,25 @@ function viewLobby(){
       ${state.isHost ? `
         ${(() => {
           const rt = state.setupRoundsTotal;
-          const collected = Object.keys(state.setupRoundPacks || {}).length;
-          const inProgress = rt && collected > 0;
-          return `<button class="btn btn-gold btn-lg btn-full" data-action="go-mode-select">${icon('play',18)} ${inProgress ? `Продовжити налаштування (${collected}/${rt} паків)` : 'Налаштувати гру та почати'}</button>`;
+          const packs = state.setupRoundPacks || {};
+          const collected = Object.keys(packs).length;
+          let ready = !!rt;
+          if (rt) for (let i = 1; i <= rt; i++) if (!packs[i]) ready = false;
+          const playersIn = playerList.filter(p => p.id !== r.hostId).length;
+
+          return `
+            <button class="btn ${ready ? 'btn-ghost' : 'btn-gold'} btn-lg btn-full" data-action="go-mode-select">
+              ${icon('settings',18)} ${rt ? `Налаштування (${collected}/${rt} паків)` : 'Налаштувати гру'}
+            </button>
+            ${ready ? `
+              <button class="btn btn-accent btn-lg btn-full" data-action="start-all-rounds" style="margin-top:10px;">
+                ${icon('play',18)} Почати гру
+              </button>
+              ${playersIn === 0 ? `<div class="info-text" style="margin-top:8px;">У кімнаті ще нікого — можна стартувати самому, щоб перевірити пак.</div>` : ''}
+            ` : `
+              <div class="info-text" style="margin-top:10px;">Заваж паки в налаштуваннях — і тут зʼявиться кнопка старту.</div>
+            `}
+          `;
         })()}
       ` : `
         <div class="card" style="text-align:center; padding:40px;">
@@ -1656,9 +1732,10 @@ function viewModeSelect(){
 
         ${state.setupErr ? `<div class="err-text" style="margin-bottom:12px;">${esc(state.setupErr)}</div>` : ''}
 
-        <button class="btn ${allRoundsReady?'btn-accent':'btn-ghost'} btn-lg btn-full" data-action="start-all-rounds" ${!allRoundsReady?'disabled':''}>
-          ${allRoundsReady ? `${icon('play',18)} Почати гру` : `Заваж паки для всіх ${rt} раундів`}
+        <button class="btn ${allRoundsReady?'btn-accent':'btn-ghost'} btn-lg btn-full" data-action="leave-mode-select">
+          ${allRoundsReady ? `${icon('check',18)} Готово — до лоббі` : `Заваж паки для всіх ${rt} раундів`}
         </button>
+        ${allRoundsReady ? `<div class="info-text" style="margin-top:12px;">Кнопка старту чекає в лоббі, де видно всіх гравців.</div>` : ''}
         ${!finalReady && allRoundsReady ? `<div class="info-text" style="margin-top:12px;">💡 Фінальне питання не задане — гра завершиться без фіналу (можна додати пізніше).</div>` : ''}
       ` : `
         <div class="info-text">Обери кількість раундів, щоб продовжити.</div>
@@ -1982,7 +2059,7 @@ function viewBoard(){
               const hasImg = q && (q.image || q.answerImage);
               const hasAud = q && q.audio;
               const hasVid = q && (q.video || q.youtube);
-              return `<button class="board-cell ${used?'used':''}" ${(used||!canPick)?'disabled':''} data-action="pick-cell" data-ci="${ci}" data-qi="${vi}">${used ? '' : cellValue}${!used && (hasImg || hasAud || hasVid) ? `<span class="cell-img-icon">${hasImg ? icon('image',12) : ''}${hasAud ? '🔊' : ''}${hasVid ? '🎬' : ''}</span>` : ''}</button>`;
+              return `<button class="board-cell ${used?'used':''}" ${(used||!canPick)?'disabled':''} data-action="pick-cell" data-ci="${ci}" data-qi="${vi}">${used ? '' : cellValue}${!used && (hasImg || hasAud || hasVid) ? `<span class="cell-media">${hasImg ? `<i class="cell-media-badge" title="Фото">${icon('image',15)}</i>` : ''}${hasAud ? `<i class="cell-media-badge" title="Аудіо">${icon('audio',15)}</i>` : ''}${hasVid ? `<i class="cell-media-badge" title="Відео">${icon('video',15)}</i>` : ''}</span>` : ''}</button>`;
             }).join('')
           ).join('')}
         </div>
@@ -2156,10 +2233,10 @@ function viewQuestion(){
       ${q.q && q.q.trim() ? `<div class="qs-question-text ${sizeClass}">${escMultiline(q.q)}</div>` : ''}
       ${state.isHost ? `
         <div class="host-answer-box">
-          <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">ВІДПОВІДЬ (ТІЛЬКИ ТИ БАЧИШ)</div>
+          <div style="font-size:11px; color:rgba(245,235,212,0.65); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">ВІДПОВІДЬ (ТІЛЬКИ ТИ БАЧИШ)</div>
           ${q.answerImage ? `<img src="${q.answerImage}" style="max-height:300px; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
-          ${q.a && q.a.trim() ? `<div style="font-family:var(--font-display); font-weight:700; font-size:18px; color:var(--green); white-space:pre-wrap;">${escMultiline(q.a)}</div>` : ''}
-          ${q.explanation && q.explanation.trim() ? `<div style="margin-top:6px; font-size:14px; font-weight:500; color:var(--green); opacity:0.8; white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
+          ${q.a && q.a.trim() ? `<div style="font-family:var(--font-display); font-weight:700; font-size:20px; color:#d8e8b4; white-space:pre-wrap;">${escMultiline(q.a)}</div>` : ''}
+          ${q.explanation && q.explanation.trim() ? `<div style="margin-top:6px; font-size:14px; font-weight:500; color:rgba(216,232,180,0.85); white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
         </div>
       ` : ''}`;
   }
@@ -2167,7 +2244,7 @@ function viewQuestion(){
   // --- TIMER BAR ---
   const timerBar = (() => {
     const now = serverNow();
-    if (r.questionState === 'buzzing' || r.questionState === 'dd_buzz') {
+    if (r.questionState === 'buzzing') {
       const total = buzzSec(r);
       const deadline = r.buzzPhaseDeadline || (now + total * 1000);
       const sec = Math.max(0, Math.ceil((deadline - now) / 1000));
@@ -2200,13 +2277,13 @@ function viewQuestion(){
   }
 
   if (r.questionState === 'dd_bid') {
-    const canBet = state.isHost || state.myId === r.ddPlayer;
+    const canBet = state.isHost;
     const max = ddMaxBid(r);
     if (canBet) {
       const cur = Number.isInteger(state.ddBidLocal) ? state.ddBidLocal : 0;
       controls += `
         <div class="card" style="max-width:420px; margin:0 auto; width:100%;">
-          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">СТАВКА (0 — ${max})</div>
+          <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">СТАВКА ГРАВЦЯ (0 — ${max})</div>
           <input type="number" class="input" id="dd-bid" min="0" max="${max}" value="${cur}"
             style="font-family:var(--font-display); font-size:24px; font-weight:700; color:var(--gold);">
           <div id="dd-bid-err" style="display:none; color:var(--accent); font-size:12px; margin-top:6px;">Ставка має бути від 0 до ${max}</div>
@@ -2216,23 +2293,8 @@ function viewQuestion(){
         </div>`;
     } else {
       controls += `<div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:8px;">
-        ⏳ ${ddP ? esc(ddP.name) : 'Гравець'} робить ставку...
+        ⏳ Скажи ведучому скільки ставиш — він внесе ставку
       </div>`;
-    }
-  }
-
-  if (r.questionState === 'dd_buzz') {
-    const bet = typeof r.ddBid === 'number' ? r.ddBid : 0;
-    const mine = state.myId === r.ddPlayer;
-    controls += `<div style="text-align:center; font-size:13px; color:var(--gold); margin-bottom:6px;">🎲 Ставка ${bet} · відповідає ${ddP ? esc(ddP.name) : ''}</div>`;
-    if (mine) {
-      controls += `<button class="buzz-btn" data-action="dd-buzz">ГОТОВИЙ ВІДПОВІДАТИ</button>
-        <div style="text-align:center; font-size:12px; color:var(--ink-dim);">або натисни <b>Пробіл</b></div>`;
-    } else if (state.isHost) {
-      controls += `<div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:8px;">Гравець читає питання...</div>
-        <div style="text-align:center;"><button class="btn btn-ghost btn-sm" data-action="dd-buzz">Почати відлік відповіді</button></div>`;
-    } else {
-      controls += `<div style="text-align:center; color:var(--ink-dim); font-size:14px; padding:8px;">Читає ${ddP ? esc(ddP.name) : 'гравець'}...</div>`;
     }
   }
 
@@ -2253,7 +2315,7 @@ function viewQuestion(){
   }
 
   if (r.questionState === 'countdown' && r.countdownDeadline) {
-    const sec = Math.max(0, Math.ceil((r.countdownDeadline - serverNow()) / 1000));
+    const sec = Math.max(0, Math.round((r.countdownDeadline - serverNow()) / 1000));
     controls += `<div style="text-align:center; padding:8px 0;">
       <div style="font-size:12px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">Базер відкриється через</div>
       <div id="countdown-num" style="font-family:var(--font-display); font-weight:900; font-size:56px; color:var(--gold); line-height:1;">${sec}</div>
@@ -2644,7 +2706,7 @@ function viewFinalBid(){
   const myInfo = finalEntityInfo(r, myKey);
   const curScore = finalEntityScore(r, myKey);
   return `
-    <div class="container slide-up" style="padding-top:24px;">
+    <div class="container slide-up" style="padding-top:24px;" data-final-key="bid-player-${bidAlreadySubmitted ? 'done' : 'input'}">
       <div class="eyebrow">ФІНАЛ · ФАЗА 1 · СТАВКА</div>
       <h2 style="font-family:var(--font-display); font-size:36px; font-weight:900; margin-top:8px;">${esc(r.finalQ.category)}</h2>
       ${teamMode ? `<div style="margin-top:8px; font-size:14px; color:${myInfo.color}; font-weight:700;">${av(myInfo.avatar)} ${esc(myInfo.name)} — ставка спільна на команду</div>` : ''}
@@ -2658,7 +2720,7 @@ function viewFinalBid(){
           <div style="margin-top:12px; color:var(--ink-dim); font-size:13px;">Очікуємо решту і питання від ведучого</div>
         </div>
       ` : `
-        <div class="card">
+        <div class="card" data-final-list>
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">${teamMode ? 'БАЛИ КОМАНДИ' : 'ТВОЇ БАЛИ'}</div>
           <div style="font-family:var(--font-display); font-size:36px; font-weight:900; color:var(--gold); margin-bottom:16px;">${curScore}</div>
           <div style="font-size:13px; color:var(--ink-dim); margin-bottom:4px;">СКІЛЬКИ СТАВИШ (0 — ${myScore})</div>
@@ -3466,7 +3528,7 @@ function attachListeners(){
   });
   // The buzzer must react to the very first touch. On iOS the first tap can be
   // swallowed as a hover event, so respond to pointerdown instead of click.
-  document.querySelectorAll('.buzz-btn[data-action="buzz"], .buzz-btn[data-action="dd-buzz"]').forEach(el => {
+  document.querySelectorAll('.buzz-btn[data-action="buzz"], .buzz-btn[data-action="buzz"]').forEach(el => {
     if (el._fastBound) return;
     el._fastBound = true;
     el.addEventListener('pointerdown', (ev) => {
@@ -3864,7 +3926,6 @@ async function handleAction(e){
     case 'pick-cell': await pickCell(parseInt(el.dataset.ci,10), parseInt(el.dataset.qi,10)); break;
     case 'open-buzz': await openBuzz(); break;
     case 'buzz': await buzz(); break;
-    case 'dd-buzz': await ddBuzz(); break;
     case 'resync': await resyncRoom(); break;
     case 'judge': await judge(el.dataset.correct); break;
     case 'reveal-answer': await revealAnswer(); break;
@@ -4531,7 +4592,7 @@ async function startGame(pack){
     } else {
       patch.teamScores = null;
     }
-    patch.countdownSecondsConfig = state.setupCountdownSeconds || 5;
+    patch.countdownSecondsConfig = (typeof state.setupCountdownSeconds === 'number' && state.setupCountdownSeconds > 0) ? state.setupCountdownSeconds : 5;
   }
   await update(ref(db, `rooms/${state.code}`), patch);
   state.subScreen = null;
@@ -4609,7 +4670,7 @@ async function pickCell(ci, qi){
     patch.buzzPhaseDeadline = null;
   } else if (mode === 'countdown') {
     // Show a countdown to all players, buzzer opens automatically after it
-    const cd = r.countdownSecondsConfig || 5;
+    const cd = (typeof r.countdownSecondsConfig === 'number' && r.countdownSecondsConfig > 0) ? r.countdownSecondsConfig : 5;
     patch.questionState = 'countdown';
     patch.countdownDeadline = now + cd * 1000;
     patch.buzzPhaseDeadline = null;
@@ -5111,6 +5172,7 @@ async function saveGameResult(){
       teamMode,
       correct: gs.correct || 0,
       audioCorrect: gs.audioCorrect || 0,
+      allIn: !!gs.allIn,
       mediaCorrect: gs.mediaCorrect || 0,
       wrong: gs.wrong || 0,
       buzzes: gs.buzzes || 0,
@@ -5163,6 +5225,7 @@ async function saveGameResult(){
     if (entry.buzzes >= 15) unlock('fast_finger');
     if (myFinalScore >= 10000) unlock('big_score');
     if (won && entry.wasNegative) unlock('comeback');
+    if (entry.allIn) unlock('all_in');
     if (prof.ddWins >= 3) unlock('dd_master');
     if (entry.finalCorrect) unlock('final_boss');
     if (place === 2) unlock('runner_up');
@@ -5231,8 +5294,8 @@ async function submitDDBid(){
   const r = state.room;
   if (!r) return;
   if (r.questionState !== 'dd_bid') return;
-  // Only the chosen player (or the host on their behalf) may set the bet
-  if (!state.isHost && state.myId !== r.ddPlayer) return;
+  // The host enters the stake the player calls out loud
+  if (!state.isHost) return;
   const max = ddMaxBid(r);
   const bid = state.ddBidLocal;
   if (!Number.isInteger(bid) || bid < 0 || bid > max) return;
@@ -5240,52 +5303,10 @@ async function submitDDBid(){
   await update(ref(db, `rooms/${state.code}`), {
     ddBid: bid,
     ddBidSubmitted: true,
-    questionState: 'dd_buzz',                    // time to read the question
-    buzzPhaseDeadline: now + buzzSec(r) * 1000,
-    answerPhaseDeadline: null,
-    phaseStartedAt: now,
-  });
-}
-
-// Daily Double: the chosen player says they're ready — start the answer clock
-async function ddBuzz(){
-  const r = state.room;
-  if (!r) return;
-  if (r.questionState !== 'dd_buzz') return;
-  if (!state.isHost && state.myId !== r.ddPlayer) return;
-  const now = serverNow();
-  await update(ref(db, `rooms/${state.code}`), {
-    questionState: 'dd_answer',
-    answerPhaseDeadline: now + answerSec(r) * 1000,
+    questionState: 'dd_answer',                  // normal thinking time starts now
+    answerPhaseDeadline: now + buzzSec(r) * 1000,
     buzzPhaseDeadline: null,
     phaseStartedAt: now,
-  });
-}
-
-// Nobody pressed in time — counts as a wrong answer
-async function timeoutDDBuzz(){
-  const fresh = await getRoom(state.code);
-  if (!fresh || fresh.questionState !== 'dd_buzz') return;
-  if (!fresh.buzzPhaseDeadline || serverNow() < fresh.buzzPhaseDeadline) return;
-  if (fresh.phaseStartedAt && serverNow() - fresh.phaseStartedAt < 1500) return;
-  const cell = fresh.currentCell; if (!cell) return;
-  const bet = typeof fresh.ddBid === 'number' ? fresh.ddBid : 0;
-  const pl = { ...fresh.players };
-  const sid = fresh.ddPlayer;
-  const ts = { ...(fresh.teamScores || {}) };
-  if (sid && pl[sid]) pl[sid] = { ...pl[sid], score: (pl[sid].score || 0) - bet };
-  if (isTeamMode(fresh)) {
-    const t = pl[sid]?.teamId;
-    if (t) ts[t] = (ts[t] || 0) - bet;
-  }
-  await update(ref(db, `rooms/${state.code}`), {
-    players: pl,
-    ...(isTeamMode(fresh) ? { teamScores: ts } : {}),
-    [`usedCells/${cell.ci}-${cell.qi}`]: true,
-    questionState: 'closed',
-    revealAnswer: true,
-    buzzPhaseDeadline: null,
-    answerPhaseDeadline: null,
   });
 }
 
@@ -5417,7 +5438,14 @@ async function judge(correctStr){
       if (q.audio) patch[`gameStats/${scorerId}/audioCorrect`] = ((r.gameStats?.[scorerId]?.audioCorrect) || 0) + 1;
       if (q.video || q.youtube) patch[`gameStats/${scorerId}/mediaCorrect`] = ((r.gameStats?.[scorerId]?.mediaCorrect) || 0) + 1;
       patch[`gameStats/${scorerId}/earned`] = ((r.gameStats?.[scorerId]?.earned) || 0) + stake;
-      if (isDD) patch[`gameStats/${scorerId}/ddWins`] = ((r.gameStats?.[scorerId]?.ddWins) || 0) + 1;
+      if (isDD) {
+        patch[`gameStats/${scorerId}/ddWins`] = ((r.gameStats?.[scorerId]?.ddWins) || 0) + 1;
+        // "All in": staked everything they had and got it right
+        const before = isTeamMode(r)
+          ? (myTeam ? teamScore(r, myTeam) : 0)
+          : (r.players?.[scorerId]?.score || 0);
+        if (stake > 0 && stake >= before) patch[`gameStats/${scorerId}/allIn`] = true;
+      }
     }
     patch.revealAnswer = true;
     patch.questionState = 'closed';
@@ -6058,6 +6086,17 @@ init();
 // ============== KEYBOARD: spacebar to buzz ==============
 document.addEventListener('keydown', (e) => {
   if (e.code !== 'Space' && e.key !== ' ') return;
+  // Space scrolls the page by default; block that whenever we're in a room and
+  // the focus isn't in a text field.
+  {
+    const t0 = e.target;
+    const tag0 = (t0 && t0.tagName) ? t0.tagName.toLowerCase() : '';
+    const type0 = (t0 && t0.type) ? String(t0.type).toLowerCase() : '';
+    const inField = (tag0 === 'textarea')
+      || (tag0 === 'input' && !['range','checkbox','radio','button','submit'].includes(type0))
+      || (t0 && t0.isContentEditable);
+    if (!inField && state.room) e.preventDefault();
+  }
   // Don't hijack space when typing in an input/textarea
   const t = e.target;
   const tag = (t && t.tagName) ? t.tagName.toLowerCase() : '';
@@ -6123,13 +6162,13 @@ function updateTimerOnly(){
   const now = serverNow();
   // Countdown phase: update the big number
   if (r.status === 'question' && r.questionState === 'countdown' && r.countdownDeadline) {
-    const cdSec = Math.max(0, Math.ceil((r.countdownDeadline - now) / 1000));
+    const cdSec = Math.max(0, Math.round((r.countdownDeadline - now) / 1000));
     const cdEl = document.getElementById('countdown-num');
     if (cdEl) cdEl.textContent = cdSec;
     return;
   }
   let sec, total;
-  if (r.status === 'question' && (r.questionState === 'buzzing' || r.questionState === 'dd_buzz')) {
+  if (r.status === 'question' && r.questionState === 'buzzing') {
     total = buzzSec(r);
     const deadline = r.buzzPhaseDeadline || (now + total * 1000);
     sec = Math.max(0, Math.ceil((deadline - now) / 1000));
@@ -6172,12 +6211,6 @@ setInterval(() => {
     if (r.questionState === 'countdown') {
       if (r.countdownDeadline && now >= r.countdownDeadline + BUF) {
         if (state.isHost || (state.clockSynced && now >= r.countdownDeadline + GRACE)) openBuzzAfterCountdown();
-      } else {
-        updateTimerOnly();
-      }
-    } else if (r.questionState === 'dd_buzz') {
-      if (r.buzzPhaseDeadline && now >= r.buzzPhaseDeadline + BUF) {
-        if (state.isHost || (state.clockSynced && now >= r.buzzPhaseDeadline + GRACE)) timeoutDDBuzz();
       } else {
         updateTimerOnly();
       }
