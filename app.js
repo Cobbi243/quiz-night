@@ -89,8 +89,16 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '3.04';
+const APP_VERSION = '3.06';
 const CHANGELOG = [
+  { v: '3.06', date: '17.09.2026', changes: [
+    'Картка гравця тепер по ширині імені, а не на весь екран',
+    'На телефоні дошка більше не вилазить за поле — гортається всередині нього',
+    'Значки медіа на телефоні стали дрібнішими і не налазять на числа',
+  ]},
+  { v: '3.05', date: '17.09.2026', changes: [
+    'Сторінка більше не блимає під час листування в чаті',
+  ]},
   { v: '3.04', date: '17.09.2026', changes: [
     'Дошка й значки медіа підігнані під телефон — нічого не вилазить і не накладається',
     'При розкритті показується лише відповідь, без повтору питання',
@@ -1360,7 +1368,29 @@ function render(force){
   if (state.room && state.code) overlay += viewChatWidget();
 
   const overlayEl = document.getElementById('overlay-root');
-  if (overlayEl && overlayEl.innerHTML !== overlay) overlayEl.innerHTML = overlay;
+  if (overlayEl && overlayEl.innerHTML !== overlay) {
+    // While the chat is open, only refresh its message list. Rewriting the whole
+    // overlay would recreate the input on every message and flicker the page.
+    const liveChat = overlayEl.querySelector('.chat-panel');
+    const typingInChat = liveChat && document.activeElement
+      && liveChat.contains(document.activeElement);
+
+    if (liveChat && overlay.indexOf('chat-panel') !== -1) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = overlay;
+      const nextChat = tmp.querySelector('.chat-panel');
+      const a2 = liveChat.querySelector('.chat-messages');
+      const b2 = nextChat && nextChat.querySelector('.chat-messages');
+      if (a2 && b2 && a2.innerHTML !== b2.innerHTML) {
+        const atBottom = a2.scrollHeight - a2.scrollTop - a2.clientHeight < 60;
+        a2.innerHTML = b2.innerHTML;
+        if (atBottom) a2.scrollTop = a2.scrollHeight;
+      }
+      if (typingInChat) { attachListeners(); return; }
+    }
+
+    overlayEl.innerHTML = overlay;
+  }
 
   // While a question is on screen, only refresh the parts that change. Rewriting
   // the whole screen would restart any playing audio/video and cause a flicker.

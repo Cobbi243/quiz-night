@@ -686,7 +686,8 @@ html, body {
 }
 .player-chip {
   min-width: 0 !important;
-  flex-shrink: 1 !important;
+  flex: 0 1 auto !important;      /* width follows the name, no stretching */
+  max-width: 260px;
 }
 .player-chip-name {
   white-space: nowrap;
@@ -762,16 +763,28 @@ html, body {
 /* Phones */
 @media (max-width: 640px) {
   .container, .container-lg { padding-left: 10px; padding-right: 10px; }
-  .board { gap: 4px; grid-template-rows: auto repeat(5, minmax(52px, 1fr)); }
-  .board-wrap { padding: 8px; border-radius: var(--r-lg); }
+  /* Six columns don't fit a phone: let the board scroll sideways inside its
+     felt instead of spilling out of it. */
+  .board-wrap {
+    padding: 8px; border-radius: var(--r-lg);
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+  .board {
+    gap: 4px;
+    grid-template-columns: repeat(6, minmax(72px, 1fr));
+    grid-template-rows: auto repeat(5, minmax(52px, 1fr));
+    min-width: 460px;
+  }
   .board-cell { font-size: clamp(13px, 4.4vw, 20px); border-radius: var(--r-sm); padding: 4px; }
   .board-header { min-height: 54px; max-height: 84px; padding: 5px 3px; }
-  .board-header .cat-name { font-size: clamp(7px, 2.3vw, 10px); -webkit-line-clamp: 5; letter-spacing: 0; }
+  .board-header .cat-name { font-size: 9px; -webkit-line-clamp: 5; letter-spacing: 0; }
 
   /* Badges must not cover the value on a narrow cell */
-  .cell-media { top: 3px; left: 3px; gap: 2px; }
-  .cell-media-badge { width: 15px; height: 15px; border-radius: 5px; box-shadow: none; }
-  .cell-media-badge svg { width: 10px; height: 10px; stroke-width: 3; }
+  .cell-media { top: 2px; left: 2px; right: 2px; gap: 1px; }
+  .cell-media-badge { width: 11px; height: 11px; border-radius: 4px; box-shadow: none; }
+  .cell-media-badge svg { width: 7px; height: 7px; stroke-width: 3.2; }
+  /* keep the number clear of the badge row */
+  .board-cell { padding-top: 14px; }
   .q-value { font-size: 24px; }
   .buzz-btn { padding: 18px 24px; font-size: 18px; }
   .player-bar { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
@@ -1124,8 +1137,8 @@ html, body {
 /* Score chips docked to the bottom edge of the screen */
 .player-bar {
   position: sticky; bottom: -4px; z-index: 30;
-  display: grid !important;
-  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  display: flex !important;
+  flex-wrap: wrap;
   gap: 10px;
   margin: 20px -20px -24px;
   padding: 14px 20px 18px !important;
@@ -1394,6 +1407,6 @@ html, body {
 </div>
 <div id="overlay-root"></div>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script type="module" src="app.js?v=202609170500"></script>
+<script type="module" src="app.js?v=202609170700"></script>
 </body>
 </html>
