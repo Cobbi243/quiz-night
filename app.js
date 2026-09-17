@@ -89,8 +89,12 @@ function finalEntityKeys(r){
 }
 
 // ============== VERSION & CHANGELOG ==============
-const APP_VERSION = '3.0';
+const APP_VERSION = '3.01';
 const CHANGELOG = [
+  { v: '3.01', date: '17.09.2026', changes: [
+    'Темніша палітра — фон і сукно стали глибшими',
+    'Виправлено підказку з відповіддю для ведучого — тепер її видно',
+  ]},
   { v: '3.0', date: '17.09.2026', changes: [
     '━━━ ОФОРМЛЕННЯ ━━━',
     '🎨 Повністю новий вигляд: світла тема, нові шрифти, оформлена дошка й сцена питання.',
@@ -2229,10 +2233,10 @@ function viewQuestion(){
       ${q.q && q.q.trim() ? `<div class="qs-question-text ${sizeClass}">${escMultiline(q.q)}</div>` : ''}
       ${state.isHost ? `
         <div class="host-answer-box">
-          <div style="font-size:11px; color:var(--ink-dim); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">ВІДПОВІДЬ (ТІЛЬКИ ТИ БАЧИШ)</div>
+          <div style="font-size:11px; color:rgba(245,235,212,0.65); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:4px;">ВІДПОВІДЬ (ТІЛЬКИ ТИ БАЧИШ)</div>
           ${q.answerImage ? `<img src="${q.answerImage}" style="max-height:300px; max-width:100%; border-radius:8px; margin-bottom:8px;" alt="">` : ''}
-          ${q.a && q.a.trim() ? `<div style="font-family:var(--font-display); font-weight:700; font-size:18px; color:var(--green); white-space:pre-wrap;">${escMultiline(q.a)}</div>` : ''}
-          ${q.explanation && q.explanation.trim() ? `<div style="margin-top:6px; font-size:14px; font-weight:500; color:var(--green); opacity:0.8; white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
+          ${q.a && q.a.trim() ? `<div style="font-family:var(--font-display); font-weight:700; font-size:20px; color:#d8e8b4; white-space:pre-wrap;">${escMultiline(q.a)}</div>` : ''}
+          ${q.explanation && q.explanation.trim() ? `<div style="margin-top:6px; font-size:14px; font-weight:500; color:rgba(216,232,180,0.85); white-space:pre-wrap;">${escMultiline(q.explanation)}</div>` : ''}
         </div>
       ` : ''}`;
   }
