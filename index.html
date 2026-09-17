@@ -119,12 +119,56 @@ html, body {
 }
 
 .back-btn {
-  background: transparent; border: none; cursor: pointer;
-  color: var(--ink-dim); font-family: inherit; font-size: 14px;
-  display: inline-flex; align-items: center; gap: 4px; padding: 4px;
-  margin-bottom: 32px;
+  background: var(--bg-2);
+  border: 1px solid var(--edge, var(--line));
+  border-bottom-width: 2px;
+  cursor: pointer;
+  color: var(--ink); font-family: inherit;
+  font-size: 14px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: var(--r-pill);
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
 }
-.back-btn:hover { color: var(--ink); }
+.back-btn:hover {
+  background: var(--cream);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-card);
+}
+.back-btn:active { transform: translateY(0); }
+
+/* On dark surfaces (question stage) the same button needs light text */
+.qs-topbar .back-btn,
+.q-stage .back-btn {
+  background: rgba(245,235,212,0.12);
+  border-color: rgba(245,235,212,0.3);
+  color: var(--cream);
+}
+.qs-topbar .back-btn:hover,
+.q-stage .back-btn:hover { background: rgba(245,235,212,0.2); }
+
+/* Ghost buttons sitting on the dark felt need light text, not dark */
+.qs-controls .btn-ghost,
+.qs-topbar .btn-ghost,
+.q-stage .btn-ghost {
+  background: rgba(245,235,212,0.12);
+  border-color: rgba(245,235,212,0.32);
+  color: var(--cream);
+  box-shadow: 0 3px 0 rgba(0,0,0,0.18);
+}
+.qs-controls .btn-ghost:hover:not(:disabled),
+.qs-topbar .btn-ghost:hover:not(:disabled),
+.q-stage .btn-ghost:hover:not(:disabled) { background: rgba(245,235,212,0.22); }
+
+/* Small text links (stats, help) get a subtle outline too */
+.link-btn {
+  border: 1px solid var(--line) !important;
+  border-radius: var(--r-pill);
+  padding: 6px 14px !important;
+  background: var(--soft) !important;
+}
+.link-btn:hover { background: var(--soft-hover) !important; }
 
 .avatar-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; margin-top: 8px; }
 .avatar-btn {
@@ -1344,6 +1388,6 @@ html, body {
 </div>
 <div id="overlay-root"></div>
 <script src="https://www.youtube.com/iframe_api"></script>
-<script type="module" src="app.js?v=202609170330"></script>
+<script type="module" src="app.js?v=202609170400"></script>
 </body>
 </html>
